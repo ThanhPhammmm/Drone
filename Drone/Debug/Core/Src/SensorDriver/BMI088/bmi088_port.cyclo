@@ -1,0 +1,16 @@
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:17:6:BMI088_Port_Init	1
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:21:6:BMI088_SetTaskHandle	1
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:25:6:BMI088_AccCS_Low	1
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:29:6:BMI088_AccCS_High	1
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:33:6:BMI088_GyroCS_Low	1
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:37:6:BMI088_GyroCS_High	1
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:41:19:BMI088_SPI_TransmitReceive_DMA	1
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:45:6:BMI088_DMA_Callback	2
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:51:24:BMI088_WaitDMA	2
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:59:13:BMI088_ClearDMACompletion	2
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:63:17:BMI088_Acc_WriteReg	2
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:80:17:BMI088_Acc_ReadReg	3
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:100:17:BMI088_Acc_ReadRegs	3
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:120:17:BMI088_Gyro_WriteReg	2
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:136:17:BMI088_Gyro_ReadReg	3
+../Core/Src/SensorDriver/BMI088/bmi088_port.c:155:17:BMI088_Gyro_ReadRegs	3

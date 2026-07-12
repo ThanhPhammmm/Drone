@@ -1,0 +1,8 @@
+#ifndef INC_SENSORDRIVER_BMI088_BMI088_TASK_H_
+#define INC_SENSORDRIVER_BMI088_BMI088_TASK_H_
+
+#include "bmi088_port.h"
+
+void IMUTask(void *argument);
+
+#endif /* INC_SENSORDRIVER_BMI088_BMI088_TASK_H_ */

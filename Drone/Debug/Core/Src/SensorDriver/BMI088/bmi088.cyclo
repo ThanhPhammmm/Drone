@@ -1,0 +1,14 @@
+../Core/Src/SensorDriver/BMI088/bmi088.c:21:13:BMI088_EnableSPI	1
+../Core/Src/SensorDriver/BMI088/bmi088.c:28:24:BMI088_Reset	3
+../Core/Src/SensorDriver/BMI088/bmi088.c:44:24:BMI088_CheckChip	3
+../Core/Src/SensorDriver/BMI088/bmi088.c:56:24:BMI088_ConfigAccel	3
+../Core/Src/SensorDriver/BMI088/bmi088.c:69:24:BMI088_ConfigGyro	3
+../Core/Src/SensorDriver/BMI088/bmi088.c:81:24:BMI088_ConfigAccelInterrupt	3
+../Core/Src/SensorDriver/BMI088/bmi088.c:93:24:BMI088_ConfigGyroInterrupt	4
+../Core/Src/SensorDriver/BMI088/bmi088.c:108:17:BMI088_Init	7
+../Core/Src/SensorDriver/BMI088/bmi088.c:136:17:BMI088_ReadGyro	4
+../Core/Src/SensorDriver/BMI088/bmi088.c:156:6:BMI088_ParseGyro	1
+../Core/Src/SensorDriver/BMI088/bmi088.c:162:17:BMI088_ReadAccel	4
+../Core/Src/SensorDriver/BMI088/bmi088.c:182:6:BMI088_ParseAccel	1
+../Core/Src/SensorDriver/BMI088/bmi088.c:188:6:BMI088_ParseData	1
+../Core/Src/SensorDriver/BMI088/bmi088.c:193:6:BMI088_Convert	1
