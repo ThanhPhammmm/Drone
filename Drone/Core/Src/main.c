@@ -20,6 +20,7 @@
 #include "main.h"
 #include "dma.h"
 #include "spi.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -31,6 +32,10 @@
 #include "bmi088.h"
 #include "bmi088_port.h"
 #include "bmi088_task.h"
+#include "app.h"
+#include "attitude_estimator_task.h"
+#include "attitude_controller_task.h"
+#include "rate_controller_task.h"
 
 /* USER CODE END Includes */
 
@@ -83,22 +88,30 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
     if(hspi != &hspi1) return;
+    if(bmi088.imuTask == NULL) return;
     BMI088_DMA_Callback(hspi);
 }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
+    if(bmi088.imuTask == NULL) return;
+
     BaseType_t hpw = pdFALSE;
 
-    if(GPIO_Pin == BMI088_GYRO_INT_Pin){
-    	bmi088.gyroReady = 1;
-        vTaskNotifyGiveFromISR(bmi088.imuTask, &hpw);
+    if(GPIO_Pin == BMI088_GYRO_INT_Pin && bmi088.gyroReady == false){
+    	bmi088.gyroReady = true;
+    	vTaskNotifyGiveFromISR(bmi088.imuTask, &hpw);
     }
-
-    if(GPIO_Pin == BMI088_ACCEL_INT_Pin){
-    	bmi088.accelReady = 1;
-        vTaskNotifyGiveFromISR(bmi088.imuTask, &hpw);
+    if(GPIO_Pin == BMI088_ACCEL_INT_Pin && bmi088.accelReady == false){
+    	bmi088.accelReady = true;
+    	vTaskNotifyGiveFromISR(bmi088.imuTask, &hpw);
     }
     portYIELD_FROM_ISR(hpw);
+}
+
+void DWT_Init(void){
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CYCCNT = 0;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 }
 
 /* USER CODE END 0 */
@@ -127,7 +140,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
+  DWT_Init();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -135,8 +148,9 @@ int main(void)
   MX_DMA_Init();
   MX_SPI1_Init();
   MX_USART1_UART_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
-
+  App_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -146,8 +160,11 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	xTaskCreate(IMUTask, "IMU", 512, NULL, 5, &imuTaskHandle);
-	vTaskStartScheduler();
+	xTaskCreate(IMUTask, "IMU", STACK_IMU, NULL, TASK_PRIO_IMU, &imuTaskHandle);
+    xTaskCreate(AttitudeEstimatorTask, "ATT", STACK_ESTIMATOR, NULL, TASK_PRIO_ESTIMATOR, NULL);
+    xTaskCreate(AttitudeControllerTask, "ATTCTRL", STACK_ATTITUDE_CTRL, NULL, TASK_PRIO_ATTITUDE_CTRL, NULL);
+    xTaskCreate(RateControllerTask, "RATECTRL", STACK_RATE, NULL, TASK_PRIO_RATE, NULL);
+    vTaskStartScheduler();
   }
   /* USER CODE END 3 */
 }

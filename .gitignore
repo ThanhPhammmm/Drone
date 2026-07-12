@@ -1,13 +1,28 @@
-/.agents
-/.metadata
-/1.Reference
-/draft.drawio.png
-/DroneArchitecture.drawio
-/Electronic components.docx
-/flight_controller_architecture 1.md
-/flight_controller_architecture.md
-/flight_controller_architecture_eskf.md
-/flight_controller_architecture_freertos.md
-/flight_controller_math.md
-/flight_controller_math_eskf.md
-/Đề cương Kiến trúc Flight Controller.docx
+# Build
+/Debug/
+/Release/
+
+# Build artifacts
+*.o
+*.d
+*.su
+*.cyclo
+*.map
+*.elf
+*.hex
+*.bin
+*.list
+*.lst
+*.srec
+
+# Eclipse cache
+.metadata/
+.settings/
+
+# Editors
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

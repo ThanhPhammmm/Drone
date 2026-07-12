@@ -5,10 +5,8 @@
 #include "bmi088.h"
 #include "semphr.h"
 
-#define BMI088_TIMEOUT_MS     10
-
-uint8_t txBuf[32];
-uint8_t rxBuf[32];
+uint8_t txBuf[8];
+uint8_t rxBuf[8];
 
 extern SPI_HandleTypeDef hspi1;
 extern BMI088_Handle_t bmi088;
@@ -64,6 +62,9 @@ BMI088_Status_t BMI088_Acc_WriteReg(uint8_t reg, uint8_t data){
     txBuf[0] = reg & BMI088_WRITE_BITMASK;
     txBuf[1] = data;
 
+    memset(txBuf + 2, 0, sizeof(txBuf) - 2);
+    memset(rxBuf, 0, sizeof(rxBuf));
+
     BMI088_ClearDMACompletion();
     BMI088_AccCS_Low();
     HAL_StatusTypeDef ret = BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, 2);
@@ -81,6 +82,9 @@ BMI088_Status_t BMI088_Acc_ReadReg(uint8_t reg, uint8_t *data){
     txBuf[0] = reg | BMI088_READ_BITMASK;
     txBuf[1] = 0;
     txBuf[2] = 0;
+
+    memset(txBuf + 3, 0, sizeof(txBuf) - 3);
+    memset(rxBuf, 0, sizeof(rxBuf));
 
     BMI088_ClearDMACompletion();
     BMI088_AccCS_Low();
@@ -121,6 +125,9 @@ BMI088_Status_t BMI088_Gyro_WriteReg(uint8_t reg, uint8_t data){
     txBuf[0] = reg & BMI088_WRITE_BITMASK;
     txBuf[1] = data;
 
+    memset(txBuf + 2, 0, sizeof(txBuf) - 2);
+    memset(rxBuf, 0, sizeof(rxBuf));
+
     BMI088_ClearDMACompletion();
     BMI088_GyroCS_Low();
     if(HAL_SPI_TransmitReceive_DMA(&hspi1, txBuf, rxBuf, 2) != HAL_OK){
@@ -136,6 +143,9 @@ BMI088_Status_t BMI088_Gyro_WriteReg(uint8_t reg, uint8_t data){
 BMI088_Status_t BMI088_Gyro_ReadReg(uint8_t reg, uint8_t *data){
     txBuf[0] = reg | BMI088_READ_BITMASK;
     txBuf[1] = 0;
+
+    memset(txBuf + 2, 0, sizeof(txBuf) - 2);
+    memset(rxBuf, 0, sizeof(rxBuf));
 
     BMI088_ClearDMACompletion();
     BMI088_GyroCS_Low();

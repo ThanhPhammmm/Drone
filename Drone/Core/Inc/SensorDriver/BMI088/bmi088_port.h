@@ -10,16 +10,18 @@
 extern SPI_HandleTypeDef hspi1;
 
 #define ACC_CS_GPIO_Port		GPIOA
-#define ACC_CS_Pin				4
+#define ACC_CS_Pin				GPIO_PIN_4
 
 #define GYRO_CS_GPIO_Port		GPIOA
-#define GYRO_CS_Pin				3
+#define GYRO_CS_Pin				GPIO_PIN_3
 
 #define BMI088_GYRO_INT_Pin		GPIO_PIN_1 // PB1
 #define BMI088_ACCEL_INT_Pin	GPIO_PIN_0 // PB0
 
 #define BMI088_READ_BITMASK		0x80
 #define BMI088_WRITE_BITMASK	0x7F
+
+#define BMI088_TIMEOUT_MS     10
 
 void BMI088_Port_Init(void);
 void BMI088_AccCS_Low(void);

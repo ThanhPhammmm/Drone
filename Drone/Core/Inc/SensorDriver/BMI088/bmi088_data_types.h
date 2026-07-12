@@ -40,8 +40,21 @@ typedef struct{
     BMI088_Gyro_t gyro;
 
     uint32_t timestamp;
+    uint32_t timestamp_us;
 
+    uint8_t gyro_updated;
+    uint8_t accel_updated;
+
+    float dt;
 } BMI088_Data_t;
+
+typedef struct{
+    BMI088_Gyro_t gyro_bias;   // rad/s,
+    BMI088_Accel_t accel_bias; // m/s^2,
+
+    uint8_t calibrated;        // 1
+
+} BMI088_Calib_t;
 
 typedef enum{
     BMI088_OK = 0,

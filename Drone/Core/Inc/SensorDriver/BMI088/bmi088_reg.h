@@ -42,6 +42,9 @@
 
 #define BMI088_ACC_SOFTRESET               0x7E
 
+#define BMI088_ACC_PWR_CONF                0x7C
+#define BMI088_ACC_PWR_CTRL                0x7D
+
 /*=========================================================
  *
  * GYROSCOPE
@@ -117,10 +120,13 @@
  *
  *========================================================*/
 
-#define BMI088_GYRO_ODR_2000               0x00
-#define BMI088_GYRO_ODR_1000               0x01
-#define BMI088_GYRO_ODR_400                0x02
-#define BMI088_GYRO_ODR_200                0x03
-#define BMI088_GYRO_ODR_100                0x04
+#define BMI088_GYRO_ODR_2000_BW_532        0x00
+#define BMI088_GYRO_ODR_2000_BW_230        0x01
+#define BMI088_GYRO_ODR_1000_BW_116        0x02
+#define BMI088_GYRO_ODR_400_BW_47          0x03
+#define BMI088_GYRO_ODR_200_BW_23          0x04
+#define BMI088_GYRO_ODR_100_BW_12          0x05
+#define BMI088_GYRO_ODR_200_BW_64          0x06
+#define BMI088_GYRO_ODR_100_BW_32          0x07
 
 #endif /* INC_SENSORDRIVER_BMI088_BMI088_REG_H_ */
