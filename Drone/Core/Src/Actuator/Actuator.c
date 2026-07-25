@@ -49,3 +49,21 @@ void MotorOutput_Update(float roll, float pitch, float yaw, float throttle){
         motor_write(i, out);
     }
 }
+
+void ESC_Calibrate(void){
+    HAL_Delay(3000);
+
+    for(uint8_t i = 0; i < MOTOR_COUNT; i++)
+    {
+        motor_write(i, 1.0f);   // 2000us
+    }
+
+    HAL_Delay(3000);
+
+    for(uint8_t i = 0; i < MOTOR_COUNT; i++)
+    {
+        motor_write(i, 0.0f);   // 1000us
+    }
+
+    HAL_Delay(3000);
+}

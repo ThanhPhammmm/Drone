@@ -39,5 +39,7 @@ BMI088_Status_t BMI088_Gyro_WriteReg(uint8_t reg, uint8_t data);
 BMI088_Status_t BMI088_Gyro_ReadRegs(uint8_t reg, uint8_t *data, uint16_t len);
 void BMI088_ParseGyro(void);
 void BMI088_ParseAccel(void);
+void BMI088_ClearDMACompletion(void);
+BMI088_Status_t BMI088_WaitDMA(void);
 
 #endif /* INC_SENSORDRIVER_BMI088_DRIVER_H_ */

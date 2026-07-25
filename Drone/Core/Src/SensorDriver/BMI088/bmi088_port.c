@@ -46,15 +46,16 @@ void BMI088_DMA_Callback(SPI_HandleTypeDef *hspi){
     portYIELD_FROM_ISR(hpw);
 }
 
-static BMI088_Status_t BMI088_WaitDMA(void){
+BMI088_Status_t BMI088_WaitDMA(void){
     if(xSemaphoreTake(imuDmaSem, pdMS_TO_TICKS(BMI088_TIMEOUT_MS)) != pdTRUE){
+    	vTaskDelay(pdMS_TO_TICKS(50));
         return BMI088_TIMEOUT;
     }
 
     return BMI088_OK;
 }
 
-static void BMI088_ClearDMACompletion(void){
+void BMI088_ClearDMACompletion(void){
     while(xSemaphoreTake(imuDmaSem, 0) == pdTRUE){}
 }
 
@@ -102,6 +103,8 @@ BMI088_Status_t BMI088_Acc_ReadReg(uint8_t reg, uint8_t *data){
 }
 
 BMI088_Status_t BMI088_Acc_ReadRegs(uint8_t reg, uint8_t *data, uint16_t len){
+    if(len == 0u || (uint32_t)len + 2u > sizeof(txBuf)) return BMI088_ERROR;
+
     txBuf[0] = reg | BMI088_READ_BITMASK;
 
     memset(&txBuf[1], 0, len + 1); /* dummy byte + register data */
@@ -163,6 +166,8 @@ BMI088_Status_t BMI088_Gyro_ReadReg(uint8_t reg, uint8_t *data){
 }
 
 BMI088_Status_t BMI088_Gyro_ReadRegs(uint8_t reg, uint8_t *data, uint16_t len){
+    if(len == 0u || (uint32_t)len + 1u > sizeof(txBuf)) return BMI088_ERROR;
+
     txBuf[0] = reg | BMI088_READ_BITMASK;
 
     memset(&txBuf[1], 0, len);

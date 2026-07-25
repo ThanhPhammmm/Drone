@@ -8,11 +8,11 @@
 #define TOPIC_MAX_SUBSCRIBERS 10
 
 typedef struct{
-    void             *buffer[2];
-    volatile uint8_t  write_index;
-    volatile uint32_t seq;
-    uint16_t          size;
-    TaskHandle_t      subscribers[TOPIC_MAX_SUBSCRIBERS];
+    void*				buffer[2];
+    volatile uint8_t	write_index;
+    volatile uint32_t	seq;
+    uint16_t			size;
+    TaskHandle_t		subscribers[TOPIC_MAX_SUBSCRIBERS];
 } Topic_t;
 
 BaseType_t Topic_Init(Topic_t *topic, void *buf0, void *buf1, uint16_t size);

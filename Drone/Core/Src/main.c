@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "dma.h"
+#include "i2c.h"
 #include "spi.h"
 #include "tim.h"
 #include "usart.h"
@@ -32,6 +33,7 @@
 #include "bmi088.h"
 #include "bmi088_port.h"
 #include "bmi088_task.h"
+#include "qmc5883_task.h"
 #include "app.h"
 #include "attitude_estimator_task.h"
 #include "attitude_controller_task.h"
@@ -149,8 +151,17 @@ int main(void)
   MX_SPI1_Init();
   MX_USART1_UART_Init();
   MX_TIM4_Init();
+  MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
   App_Init();
+
+	xTaskCreate(IMUTask, "IMU", STACK_IMU, NULL, TASK_PRIO_IMU, &imuTaskHandle);
+	xTaskCreate(AttitudeEstimatorTask, "ATT", STACK_ESTIMATOR, NULL, TASK_PRIO_ESTIMATOR, NULL);
+	xTaskCreate(AttitudeControllerTask, "ATTCTRL", STACK_ATTITUDE_CTRL, NULL, TASK_PRIO_ATTITUDE_CTRL, NULL);
+	xTaskCreate(RateControllerTask, "RATECTRL", STACK_RATE, NULL, TASK_PRIO_RATE, NULL);
+	xTaskCreate(MagTask, "MAG", STACK_MAG, NULL, TASK_PRIO_MAG, NULL);
+	vTaskStartScheduler();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -160,11 +171,6 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	xTaskCreate(IMUTask, "IMU", STACK_IMU, NULL, TASK_PRIO_IMU, &imuTaskHandle);
-    xTaskCreate(AttitudeEstimatorTask, "ATT", STACK_ESTIMATOR, NULL, TASK_PRIO_ESTIMATOR, NULL);
-    xTaskCreate(AttitudeControllerTask, "ATTCTRL", STACK_ATTITUDE_CTRL, NULL, TASK_PRIO_ATTITUDE_CTRL, NULL);
-    xTaskCreate(RateControllerTask, "RATECTRL", STACK_RATE, NULL, TASK_PRIO_RATE, NULL);
-    vTaskStartScheduler();
   }
   /* USER CODE END 3 */
 }

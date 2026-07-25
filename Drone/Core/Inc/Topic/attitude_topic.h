@@ -21,9 +21,9 @@ typedef struct{
     float pitchRate;
     float yawRate;
 
-    float biasX;
-    float biasY;
-    float biasZ;
+    float gyroBiasX;
+    float gyroBiasY;
+    float gyroBiasZ;
 
     float dt;
 
