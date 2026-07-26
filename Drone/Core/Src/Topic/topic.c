@@ -23,6 +23,7 @@ BaseType_t Topic_Publish(Topic_t *topic, const void *data){
     memcpy(topic->buffer[spare], data, topic->size);
     __DMB();
     topic->write_index = spare;
+    __DMB();
     topic->seq++;
 
     for(uint8_t id = 0; id < TOPIC_MAX_SUBSCRIBERS; id++){
@@ -38,6 +39,7 @@ BaseType_t Topic_Copy(Topic_t *topic, void *data){
     uint8_t  idx;
     do {
         s   = topic->seq;
+        __DMB();
         idx = topic->write_index;
         memcpy(data, topic->buffer[idx], topic->size);
         __DMB();

@@ -5,8 +5,8 @@
 #include <stdint.h>
 
 typedef struct{
-    float rollRate;
-    float pitchRate;
+	float rollRate;
+	float pitchRate;
     float yawRate;
 
     uint32_t timestamp_us;

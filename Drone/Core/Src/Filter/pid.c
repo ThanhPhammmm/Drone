@@ -5,9 +5,13 @@ void PID_Init(PID_t *pid, float kp, float ki, float kd, float integralLimit){
     pid->ki = ki;
     pid->kd = kd;
 
-    pid->integral = 0.0f;
     pid->integralLimit = integralLimit;
 
+    PID_Reset(pid);
+}
+
+void PID_Reset(PID_t *pid){
+    pid->integral = 0.0f;
     pid->prevError = 0.0f;
 }
 

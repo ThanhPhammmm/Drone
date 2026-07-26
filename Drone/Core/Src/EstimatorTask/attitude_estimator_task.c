@@ -2,10 +2,35 @@
 #include "attitude_estimator_task.h"
 #include "mahony.h"
 #include "imu_topic.h"
+#include "mag_topic.h"
 #include "Const.h"
+#include <stdio.h>
+
+#define MAG_MAX_AGE_US   200000U
 
 static Mahony_t mahony;
 AttitudeEstimator_Handle_t attitudeEstimator;
+
+extern UART_HandleTypeDef huart1;
+void BMI088_PrintAttitude(const AttitudeEstimator_Handle_t* attitudeEstimator){
+	static char buf[128];
+	static uint32_t last_print_time = 0;
+	uint32_t current_time = HAL_GetTick();
+
+	if (current_time - last_print_time < 1000)
+		return;
+
+	if (huart1.gState != HAL_UART_STATE_READY)
+		return;
+
+	int len = snprintf(buf, sizeof(buf),
+		"%.6f,%.6f,%.6f\r\n",
+		attitudeEstimator->data.roll,attitudeEstimator->data.pitch, attitudeEstimator->data.yaw);
+
+	if (HAL_UART_Transmit_DMA(&huart1, (uint8_t *)buf, len) == HAL_OK){
+		last_print_time = current_time;
+	}
+}
 
 void AttitudeEstimator_SetTaskHandle(TaskHandle_t handle){
 	attitudeEstimator.attitudeTask = handle;
@@ -23,7 +48,17 @@ void AttitudeEstimatorTask(void *argument){
 
 		if(IMUTopic_Copy(&imu) != pdPASS) continue;
 
-		Mahony_Update(&mahony, &imu);
+		Mag_Data_t mag = {0};
+		uint8_t magValid = 0;
+		if(MagTopic_Copy(&mag, 0) == pdPASS){
+			int32_t age_us = (int32_t)(imu.timestamp_us - mag.timestamp_us);
+			if(age_us > -(int32_t)MAG_MAX_AGE_US && age_us < (int32_t)MAG_MAX_AGE_US){
+				magValid = 1;
+			}
+		}
+		float magVec[3] = { mag.x, mag.y, mag.z };
+
+		Mahony_Update(&mahony, &imu, magVec, magValid);
 
 		Attitude_Data_t *attitude = &attitudeEstimator.data;
 
@@ -35,17 +70,21 @@ void AttitudeEstimatorTask(void *argument){
 
 		Mahony_GetEuler(&mahony, &attitude->roll, &attitude->pitch, &attitude->yaw);
 
-        attitude->rollRate  = imu.gyro.x;
-        attitude->pitchRate = imu.gyro.y;
-        attitude->yawRate   = imu.gyro.z;
+	    float rate[3];
+	    Mahony_GetRate(&mahony, rate);
 
-		attitude->biasX = mahony.bias[0];
-		attitude->biasY = mahony.bias[1];
-		attitude->biasZ = mahony.bias[2];
+		attitude->rollRate  = rate[0];
+		attitude->pitchRate = rate[1];
+		attitude->yawRate   = rate[2];
+
+		attitude->gyroBiasX = mahony.bias[0];
+		attitude->gyroBiasY = mahony.bias[1];
+		attitude->gyroBiasZ = mahony.bias[2];
 
         attitude->dt = imu.dt;
 		attitude->timestamp_us = imu.timestamp_us;
 
 		AttitudeTopic_Publish(attitude);
+		BMI088_PrintAttitude(&attitudeEstimator);
     }
 }

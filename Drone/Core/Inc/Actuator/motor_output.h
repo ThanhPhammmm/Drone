@@ -5,5 +5,6 @@
 
 void MotorOutput_Init(void);
 void MotorOutput_Update(float roll, float pitch, float yaw, float throttle);
+void ESC_Calibrate(void);
 
 #endif /* INC_ACTUATOR_MOTOR_OUTPUT_H_ */

@@ -3,7 +3,8 @@
 volatile arm_state_t arm_state = DISARMED;
 
 void Arm_Init(void){
-	arm_state = DISARMED;
+	//arm_state = DISARMED;
+	arm_state = ARMED;
 }
 
 void Arm_Set(arm_state_t s){

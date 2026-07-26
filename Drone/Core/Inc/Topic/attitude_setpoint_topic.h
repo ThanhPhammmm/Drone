@@ -5,8 +5,11 @@
 #include <stdint.h>
 
 typedef struct{
-    /* target roll/pitch angle (rad); yaw has no heading reference (no
-     * magnetometer) so it is commanded directly as a rate instead */
+    /* target roll/pitch angle (rad). Yaw is commanded as a rate rather than a
+     * heading: the magnetometer does give the estimator an absolute heading
+     * (attitude.yaw), but the attitude controller deliberately passes the yaw
+     * stick straight through, as most multirotors do. Closing the loop on
+     * attitude.yaw would turn this into heading hold. */
     float roll;
     float pitch;
     float yawRate;

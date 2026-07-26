@@ -30,10 +30,15 @@ static void BMI088_EnableSPI(void){
 static BMI088_Status_t BMI088_PowerUpAccel(void){
     BMI088_Status_t status;
 
+    status = BMI088_Acc_WriteReg(BMI088_ACC_PWR_CONF, 0x00); // active mode
+    if(status != BMI088_OK) return status;
+
+    vTaskDelay(pdMS_TO_TICKS(5));
+
     status = BMI088_Acc_WriteReg(BMI088_ACC_PWR_CTRL, 0x04); // enter normal mode
     if(status != BMI088_OK) return status;
 
-    vTaskDelay(pdMS_TO_TICKS(1));
+    vTaskDelay(pdMS_TO_TICKS(50));
 
     return BMI088_OK;
 }
@@ -164,19 +169,16 @@ BMI088_Status_t BMI088_ReadGyro(void){
 
     memset(gyroTx + 1, 0, sizeof(gyroTx) - 1);
     memset(gyroRx, 0, sizeof(gyroRx));
+    BMI088_ClearDMACompletion();
     BMI088_GyroCS_Low();
-    while(xSemaphoreTake(imuDmaSem, 0) == pdTRUE);
     if(HAL_SPI_TransmitReceive_DMA(&hspi1, gyroTx, gyroRx, 7) != HAL_OK){
         BMI088_GyroCS_High();
         return BMI088_ERROR;
     }
-    if(xSemaphoreTake(imuDmaSem, pdMS_TO_TICKS(BMI088_TIMEOUT_MS)) == 0){
-        BMI088_GyroCS_High();
-        return BMI088_TIMEOUT;
-    }
+    BMI088_Status_t status = BMI088_WaitDMA();
     BMI088_GyroCS_High();
 
-    return BMI088_OK;
+    return status;
 }
 
 void BMI088_ParseGyro(void){
@@ -190,19 +192,16 @@ BMI088_Status_t BMI088_ReadAccel(void){
 
     memset(accelTx + 1, 0, sizeof(accelTx) - 1);
     memset(accelRx, 0, sizeof(accelRx));
+    BMI088_ClearDMACompletion();
     BMI088_AccCS_Low();
-    while(xSemaphoreTake(imuDmaSem, 0) == pdTRUE);
     if(HAL_SPI_TransmitReceive_DMA(&hspi1, accelTx, accelRx, 8) != HAL_OK){
         BMI088_AccCS_High();
         return BMI088_ERROR;
     }
-    if(xSemaphoreTake(imuDmaSem, pdMS_TO_TICKS(BMI088_TIMEOUT_MS)) == 0){
-        BMI088_AccCS_High();
-        return BMI088_TIMEOUT;
-    }
+    BMI088_Status_t status = BMI088_WaitDMA();
     BMI088_AccCS_High();
 
-    return BMI088_OK;
+    return status;
 }
 
 void BMI088_ParseAccel(void){
@@ -254,10 +253,10 @@ void BMI088_Convert(void){
         bmi088.calib.gyro_bias.z;
 }
 
-BMI088_Status_t BMI088_Calibrate(uint16_t numSamples){
+BMI088_Status_t BMI088_Calibrate(uint32_t numSamples){
     BMI088_Status_t status;
 
-    if(numSamples == 0) numSamples = BMI088_CALIB_DEFAULT_SAMPLES;
+    if(numSamples < 2u) numSamples = BMI088_CALIB_DEFAULT_SAMPLES;
 
     bmi088.calib.gyro_bias.x = 0.0f;
     bmi088.calib.gyro_bias.y = 0.0f;
@@ -271,7 +270,7 @@ BMI088_Status_t BMI088_Calibrate(uint16_t numSamples){
     float g_M2[3]   = {0.0f, 0.0f, 0.0f}; // Welford => variance
     float a_mean[3] = {0.0f, 0.0f, 0.0f};
 
-    for(uint16_t i = 1; i <= numSamples; i++){
+    for(uint32_t i = 1; i <= numSamples; i++){
         status = BMI088_ReadGyro();
         if(status != BMI088_OK) return status;
         BMI088_ParseGyro();

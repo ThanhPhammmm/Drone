@@ -13,6 +13,7 @@ typedef struct{
 } PID_t;
 
 void PID_Init(PID_t *pid, float kp, float ki, float kd, float integralLimit);
+void PID_Reset(PID_t *pid);
 float PID_Update(PID_t *pid, float setpoint, float measurement, float dt);
 
 #endif /* INC_FILTER_PID_PID_H_ */
