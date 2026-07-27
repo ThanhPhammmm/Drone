@@ -8,22 +8,25 @@
 #include <stm32f4xx_hal.h>
 #include <stdio.h>
 
-#define RATE_PID_KP_ROLL		0.1f
-#define RATE_PID_KI_ROLL		0.0f
-#define RATE_PID_KD_ROLL		0.002f
+#define RATE_PID_KP_ROLL		0.31610f
+#define RATE_PID_KI_ROLL		0.01132f
+#define RATE_PID_KD_ROLL		0.00510f
 
-#define RATE_PID_KP_PITCH		0.1f
-#define RATE_PID_KI_PITCH		0.0f
-#define RATE_PID_KD_PITCH		0.002f
+#define RATE_PID_KP_PITCH 		0.31610f
+#define RATE_PID_KI_PITCH 		0.01132f
+#define RATE_PID_KD_PITCH 		0.00510f
 
-#define RATE_PID_KP_YAW			0.5f
-#define RATE_PID_KI_YAW			0.03f
-#define RATE_PID_KD_YAW			0.021f
+#define RATE_PID_KP_YAW			1.73369f
+#define RATE_PID_KI_YAW   		0.15271f
+#define RATE_PID_KD_YAW   		0.00252f
 
 #define RATE_PID_INTEGRAL_LIMIT	3.0f
+#define RATE_PID_OUTPUT_LIMIT	0.4f
+#define RATE_PID_D_CUTOFF_HZ	40.0f
+#define RATE_SETPOINT_MAX_AGE_US	100000U
 
 RateController_Handle_t rateController;
-volatile float g_throttle = 0.5f;
+volatile float g_throttle = 0.0f;
 
 static PID_t rollRatePID;
 static PID_t pitchRatePID;
@@ -45,7 +48,7 @@ void BMI088_PrintRate(const RateController_Handle_t* rateController){
 		"%.6f,%.6f,%.6f\r\n",
 		rateController->rollOutput,rateController->pitchOutput, rateController->yawOutput);
 
-	if (HAL_UART_Transmit_DMA(&huart1, (uint8_t *)buf, len) == HAL_OK){
+	if (len > 0 && HAL_UART_Transmit_DMA(&huart1, (uint8_t *)buf, (uint16_t)len) == HAL_OK){
 		last_print_time = current_time;
 	}
 }
@@ -54,13 +57,28 @@ void RateController_SetTaskHandle(TaskHandle_t handle){
 	rateController.controllerTask = handle;
 }
 
+static void RateController_Idle(void){
+	PID_Reset(&rollRatePID);
+	PID_Reset(&pitchRatePID);
+	PID_Reset(&yawRatePID);
+
+	rateController.rollOutput  = 0.0f;
+	rateController.pitchOutput = 0.0f;
+	rateController.yawOutput   = 0.0f;
+
+	MotorOutput_Update(0.0f, 0.0f, 0.0f, 0.0f);
+}
+
 void RateControllerTask(void *argument){
 	RateController_SetTaskHandle(xTaskGetCurrentTaskHandle());
 	AttitudeTopic_Subscribe(rateController.controllerTask, RATE_CONTROLLER_ID_TASK);
 
-	PID_Init(&rollRatePID,  RATE_PID_KP_ROLL,  RATE_PID_KI_ROLL,  RATE_PID_KD_ROLL,  RATE_PID_INTEGRAL_LIMIT);
-	PID_Init(&pitchRatePID, RATE_PID_KP_PITCH, RATE_PID_KI_PITCH, RATE_PID_KD_PITCH, RATE_PID_INTEGRAL_LIMIT);
-	PID_Init(&yawRatePID,   RATE_PID_KP_YAW,   RATE_PID_KI_YAW,   RATE_PID_KD_YAW,   RATE_PID_INTEGRAL_LIMIT);
+	PID_Init(&rollRatePID,  RATE_PID_KP_ROLL,  RATE_PID_KI_ROLL,  RATE_PID_KD_ROLL,
+	         RATE_PID_INTEGRAL_LIMIT, RATE_PID_OUTPUT_LIMIT, RATE_PID_D_CUTOFF_HZ);
+	PID_Init(&pitchRatePID, RATE_PID_KP_PITCH, RATE_PID_KI_PITCH, RATE_PID_KD_PITCH,
+	         RATE_PID_INTEGRAL_LIMIT, RATE_PID_OUTPUT_LIMIT, RATE_PID_D_CUTOFF_HZ);
+	PID_Init(&yawRatePID,   RATE_PID_KP_YAW,   RATE_PID_KI_YAW,   RATE_PID_KD_YAW,
+	         RATE_PID_INTEGRAL_LIMIT, RATE_PID_OUTPUT_LIMIT, RATE_PID_D_CUTOFF_HZ);
 
 	Attitude_Data_t attitude;
 	RateSetpoint_Data_t setpoint;
@@ -68,20 +86,19 @@ void RateControllerTask(void *argument){
 	while(1){
 		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);          /* 1 kHz, from estimator */
 		if(AttitudeTopic_Copy(&attitude) != pdPASS) continue;
-		RateSetpointTopic_Copy(&setpoint);                /* latest (250 Hz) */
+		if(RateSetpointTopic_Copy(&setpoint) != pdPASS) continue;   /* latest (250 Hz) */
 
 	    if(arm_state != ARMED){
-	      PID_Reset(&rollRatePID);
-	      PID_Reset(&pitchRatePID);
-	      PID_Reset(&yawRatePID);
-
-	      rateController.rollOutput  = 0.0f;
-	      rateController.pitchOutput = 0.0f;
-	      rateController.yawOutput   = 0.0f;
-
-	      MotorOutput_Update(0.0f, 0.0f, 0.0f, 0.0f);
+	      RateController_Idle();
 	      continue;
 	    }
+
+		uint32_t age_us = attitude.timestamp_us - setpoint.timestamp_us;
+		if(age_us > RATE_SETPOINT_MAX_AGE_US){
+			setpoint.rollRate  = 0.0f;
+			setpoint.pitchRate = 0.0f;
+			setpoint.yawRate   = 0.0f;
+		}
 
 		rateController.rollOutput  = PID_Update(&rollRatePID,  setpoint.rollRate,  attitude.rollRate,  attitude.dt);
 		rateController.pitchOutput = PID_Update(&pitchRatePID, setpoint.pitchRate, attitude.pitchRate, attitude.dt);

@@ -26,5 +26,6 @@ void MagTask(void *argument){
             mag.timestamp_us = DWT->CYCCNT / (SystemCoreClock / 1000000U);
             MagTopic_Publish(&mag);
         }
+        /* future: if(baroOk && BMP388_Read() == BMP388_OK){ ...BaroTopic_Publish(...); } */
     }
 }

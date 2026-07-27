@@ -34,15 +34,20 @@ BaseType_t Topic_Publish(Topic_t *topic, const void *data){
     return pdPASS;
 }
 
+#define TOPIC_COPY_MAX_RETRIES 8
+
 BaseType_t Topic_Copy(Topic_t *topic, void *data){
     uint32_t s;
     uint8_t  idx;
-    do {
+
+    for(uint8_t attempt = 0; attempt < TOPIC_COPY_MAX_RETRIES; attempt++){
         s   = topic->seq;
         __DMB();
         idx = topic->write_index;
         memcpy(data, topic->buffer[idx], topic->size);
         __DMB();
-    } while(s != topic->seq);
-    return pdPASS;
+
+        if(s == topic->seq) return pdPASS;
+    }
+    return pdFAIL;
 }

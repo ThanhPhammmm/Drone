@@ -2,16 +2,17 @@
 #include "attitude_topic.h"
 #include "attitude_setpoint_topic.h"
 #include "Const.h"
+#include "arm.h"
 
-#define ATTITUDE_KP_ROLL			8.0f
-#define ATTITUDE_KP_PITCH			8.0f
+#define ATTITUDE_KP_ROLL			21.325f
+#define ATTITUDE_KP_PITCH			21.325f
 
 #define RATE_MAX_ROLL				8.0f    /* ~458 deg/s */
 #define RATE_MAX_PITCH				8.0f
 #define RATE_MAX_YAW				4.0f    /* ~229 deg/s */
 
+#define ATTITUDE_MAX_TILT			0.6f    /* ~34 deg */
 #define ATTITUDE_CTRL_PERIOD_MS		4       /* 250 Hz */
-
 #define CLAMP(v, lo, hi)  ((v) < (lo) ? (lo) : ((v) > (hi) ? (hi) : (v)))
 
 AttitudeController_Handle_t attitudeController;
@@ -36,15 +37,25 @@ void AttitudeControllerTask(void *argument){
 
 		RateSetpoint_Data_t* rate = &attitudeController.data;
 
-		/* P controller: attitude error -> desired body rate */
-		rate->rollRate  = ATTITUDE_KP_ROLL  * (setpoint.roll  - attitude.roll);
-		rate->pitchRate = ATTITUDE_KP_PITCH * (setpoint.pitch - attitude.pitch);
-		rate->yawRate   = setpoint.yawRate;   /* yaw commanded as rate directly */
+		if(arm_state != ARMED){
+			rate->rollRate  = 0.0f;
+			rate->pitchRate = 0.0f;
+			rate->yawRate   = 0.0f;
+		}
+		else{
+			float rollCmd  = CLAMP(setpoint.roll,  -ATTITUDE_MAX_TILT, ATTITUDE_MAX_TILT);
+			float pitchCmd = CLAMP(setpoint.pitch, -ATTITUDE_MAX_TILT, ATTITUDE_MAX_TILT);
 
-		/* Rate Limiter */
-		rate->rollRate  = CLAMP(rate->rollRate,  -RATE_MAX_ROLL,  RATE_MAX_ROLL);
-		rate->pitchRate = CLAMP(rate->pitchRate, -RATE_MAX_PITCH, RATE_MAX_PITCH);
-		rate->yawRate   = CLAMP(rate->yawRate,   -RATE_MAX_YAW,   RATE_MAX_YAW);
+			/* P controller: attitude error -> desired body rate */
+			rate->rollRate  = ATTITUDE_KP_ROLL  * (rollCmd  - attitude.roll);
+			rate->pitchRate = ATTITUDE_KP_PITCH * (pitchCmd - attitude.pitch);
+			rate->yawRate   = setpoint.yawRate;   /* yaw commanded as rate directly */
+
+			/* Rate Limiter */
+			rate->rollRate  = CLAMP(rate->rollRate,  -RATE_MAX_ROLL,  RATE_MAX_ROLL);
+			rate->pitchRate = CLAMP(rate->pitchRate, -RATE_MAX_PITCH, RATE_MAX_PITCH);
+			rate->yawRate   = CLAMP(rate->yawRate,   -RATE_MAX_YAW,   RATE_MAX_YAW);
+		}
 
 		rate->timestamp_us = attitude.timestamp_us;
 
