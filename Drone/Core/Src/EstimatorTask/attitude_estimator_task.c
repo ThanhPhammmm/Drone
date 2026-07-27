@@ -6,7 +6,7 @@
 #include "Const.h"
 #include <stdio.h>
 
-#define MAG_MAX_AGE_US   200000U
+#define MAG_MAX_AGE_US   20000U
 
 static Mahony_t mahony;
 AttitudeEstimator_Handle_t attitudeEstimator;
@@ -50,11 +50,11 @@ void AttitudeEstimatorTask(void *argument){
 
 		Mag_Data_t mag = {0};
 		uint8_t magValid = 0;
-		if(MagTopic_Copy(&mag, 0) == pdPASS){
-			int32_t age_us = (int32_t)(imu.timestamp_us - mag.timestamp_us);
-			if(age_us > -(int32_t)MAG_MAX_AGE_US && age_us < (int32_t)MAG_MAX_AGE_US){
-				magValid = 1;
-			}
+		if(MagTopic_Copy(&mag, 0) == pdPASS && mag.timestamp_us != 0){
+		    uint32_t age_us = imu.timestamp_us - mag.timestamp_us;
+		    if(age_us < MAG_MAX_AGE_US){
+		        magValid = 1;
+		    }
 		}
 		float magVec[3] = { mag.x, mag.y, mag.z };
 
