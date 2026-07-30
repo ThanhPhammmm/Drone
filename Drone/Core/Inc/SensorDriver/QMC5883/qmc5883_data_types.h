@@ -12,7 +12,9 @@ typedef struct{
 } QMC5883_Field_t;
 
 typedef struct{
-    float   offset[3];
+	float   offset[3];
+	float   minV[3];
+	float   maxV[3];
     uint8_t calibrated;
 } QMC5883_Calib_t;
 

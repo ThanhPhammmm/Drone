@@ -68,26 +68,32 @@ QMC5883_Status_t QMC5883_Read(void){
     return QMC5883_OK;
 }
 
-QMC5883_Status_t QMC5883_Calibrate(uint32_t durationMs){
-    float minV[3] = {  1e6f,  1e6f,  1e6f };
-    float maxV[3] = { -1e6f, -1e6f, -1e6f };
-
-    TickType_t start = xTaskGetTickCount();
-    while((xTaskGetTickCount() - start) < pdMS_TO_TICKS(durationMs)){
-        if(QMC5883_Read() == QMC5883_OK){
-            float s[3] = { (float)qmc5883.raw.x, (float)qmc5883.raw.y, (float)qmc5883.raw.z };
-            for(uint8_t k = 0; k < 3; k++){
-                if(s[k] < minV[k]) minV[k] = s[k];
-                if(s[k] > maxV[k]) maxV[k] = s[k];
-            }
-        }
-        vTaskDelay(pdMS_TO_TICKS(20));
-    }
-
+void QMC5883_CalibReset(void){
     for(uint8_t k = 0; k < 3; k++){
-        qmc5883.calib.offset[k] = (minV[k] + maxV[k]) * 0.5f;
+        qmc5883.calib.minV[k]	=  1e6f;
+        qmc5883.calib.maxV[k]	= -1e6f;
+        qmc5883.calib.offset[k]	=  0.0f;
+    }
+    qmc5883.calib.calibrated = 0;
+}
+
+void QMC5883_CalibAccumulate(void){
+    float s[3] = { (float)qmc5883.raw.x, (float)qmc5883.raw.y, (float)qmc5883.raw.z };
+    for(uint8_t k = 0; k < 3; k++){
+        if(s[k] < qmc5883.calib.minV[k]) qmc5883.calib.minV[k] = s[k];
+        if(s[k] > qmc5883.calib.maxV[k]) qmc5883.calib.maxV[k] = s[k];
+    }
+}
+
+void QMC5883_CalibFinish(void){
+    for(uint8_t k = 0; k < 3; k++){
+        qmc5883.calib.offset[k] = (qmc5883.calib.minV[k] + qmc5883.calib.maxV[k]) * 0.5f;
     }
     qmc5883.calib.calibrated = 1;
+}
 
-    return QMC5883_OK;
+uint8_t QMC5883_DataReady(void){
+    uint8_t status = 0;
+    if(QMC5883_ReadRegs(QMC5883_REG_STATUS, &status, 1) != QMC5883_OK) return 0;
+    return (status & QMC5883_STATUS_DRDY) ? 1 : 0;
 }
