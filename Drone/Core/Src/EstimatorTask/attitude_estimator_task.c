@@ -5,6 +5,7 @@
 #include "mag_topic.h"
 #include "Const.h"
 #include <stdio.h>
+#include "bmi088.h"
 
 #define MAG_MAX_AGE_US   20000U
 
@@ -47,6 +48,10 @@ void AttitudeEstimatorTask(void *argument){
 		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
 		if(IMUTopic_Copy(&imu) != pdPASS) continue;
+
+        float ax = imu.accel.x;
+        float ay = imu.accel.y;
+        float az = imu.accel.z;
 
 		Mag_Data_t mag = {0};
 		uint8_t magValid = 0;

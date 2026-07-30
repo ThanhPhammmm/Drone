@@ -5,9 +5,9 @@
 #include "task.h"
 
 typedef struct {
-	float rollOutput;
-	float pitchOutput;
-	float yawOutput;
+	float rollTorqueOutput;
+	float pitchTorqueOutput;
+	float yawTorqueOutput;
 
 	TaskHandle_t controllerTask;
 } RateController_Handle_t;

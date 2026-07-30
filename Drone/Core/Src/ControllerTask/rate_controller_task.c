@@ -7,6 +7,7 @@
 #include "arm.h"
 #include <stm32f4xx_hal.h>
 #include <stdio.h>
+#include "thrust_topic.h"
 
 #define RATE_PID_KP_ROLL		0.31610f
 #define RATE_PID_KI_ROLL		0.01132f
@@ -27,6 +28,8 @@
 
 RateController_Handle_t rateController;
 volatile float g_throttle = 0.0f;
+Thrust_Data_t thrust;
+static float lastThrust = 0.0f;
 
 static PID_t rollRatePID;
 static PID_t pitchRatePID;
@@ -46,7 +49,7 @@ void BMI088_PrintRate(const RateController_Handle_t* rateController){
 
 	int len = snprintf(buf, sizeof(buf),
 		"%.6f,%.6f,%.6f\r\n",
-		rateController->rollOutput,rateController->pitchOutput, rateController->yawOutput);
+		rateController->rollTorqueOutput,rateController->pitchTorqueOutput, rateController->yawTorqueOutput);
 
 	if (len > 0 && HAL_UART_Transmit_DMA(&huart1, (uint8_t *)buf, (uint16_t)len) == HAL_OK){
 		last_print_time = current_time;
@@ -62,9 +65,9 @@ static void RateController_Idle(void){
 	PID_Reset(&pitchRatePID);
 	PID_Reset(&yawRatePID);
 
-	rateController.rollOutput  = 0.0f;
-	rateController.pitchOutput = 0.0f;
-	rateController.yawOutput   = 0.0f;
+	rateController.rollTorqueOutput  = 0.0f;
+	rateController.pitchTorqueOutput = 0.0f;
+	rateController.yawTorqueOutput   = 0.0f;
 
 	MotorOutput_Update(0.0f, 0.0f, 0.0f, 0.0f);
 }
@@ -84,7 +87,7 @@ void RateControllerTask(void *argument){
 	RateSetpoint_Data_t setpoint;
 
 	while(1){
-		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);          /* 1 kHz, from estimator */
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);          /* 2 kHz, from estimator */
 		if(AttitudeTopic_Copy(&attitude) != pdPASS) continue;
 		if(RateSetpointTopic_Copy(&setpoint) != pdPASS) continue;   /* latest (250 Hz) */
 
@@ -100,11 +103,15 @@ void RateControllerTask(void *argument){
 			setpoint.yawRate   = 0.0f;
 		}
 
-		rateController.rollOutput  = PID_Update(&rollRatePID,  setpoint.rollRate,  attitude.rollRate,  attitude.dt);
-		rateController.pitchOutput = PID_Update(&pitchRatePID, setpoint.pitchRate, attitude.pitchRate, attitude.dt);
-		rateController.yawOutput   = PID_Update(&yawRatePID,   setpoint.yawRate,   attitude.yawRate,   attitude.dt);
+		rateController.rollTorqueOutput  = PID_Update(&rollRatePID,  setpoint.rollRate,  attitude.rollRate,  attitude.dt);
+		rateController.pitchTorqueOutput = PID_Update(&pitchRatePID, setpoint.pitchRate, attitude.pitchRate, attitude.dt);
+		rateController.yawTorqueOutput   = PID_Update(&yawRatePID,   setpoint.yawRate,   attitude.yawRate,   attitude.dt);
 
+        if(ThrustTopic_Copy(&thrust, 0) == pdPASS){
+            lastThrust = thrust.thrust;
+        }
 		//BMI088_PrintRate(&rateController);
-		MotorOutput_Update(rateController.rollOutput, rateController.pitchOutput, rateController.yawOutput, g_throttle);
+		//MotorOutput_Update(rateController.rollTorqueOutput, rateController.pitchTorqueOutput, rateController.yawTorqueOutput, g_throttle);
+        MotorOutput_Update(rateController.rollTorqueOutput, rateController.pitchTorqueOutput, rateController.yawTorqueOutput, lastThrust);
 	}
 }

@@ -39,6 +39,7 @@
 #include "attitude_controller_task.h"
 #include "rate_controller_task.h"
 #include "magbaro_task.h"
+#include "altitude_estimator_task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -156,11 +157,12 @@ int main(void)
   App_Init();
 
 	xTaskCreate(IMUTask, "IMU", STACK_IMU, NULL, TASK_PRIO_IMU, &imuTaskHandle);
-	xTaskCreate(AttitudeEstimatorTask, "ATT", STACK_ESTIMATOR, NULL, TASK_PRIO_ESTIMATOR, NULL);
+	xTaskCreate(AttitudeEstimatorTask, "ATT", STACK_ATT_ESTIMATOR, NULL, TASK_PRIO_ATT_ESTIMATOR, NULL);
 	xTaskCreate(AttitudeControllerTask, "ATTCTRL", STACK_ATTITUDE_CTRL, NULL, TASK_PRIO_ATTITUDE_CTRL, NULL);
 	xTaskCreate(RateControllerTask, "RATECTRL", STACK_RATE, NULL, TASK_PRIO_RATE, NULL);
+	xTaskCreate(AltitudeEstimatorTask, "ALTEST", STACK_ALT_ESTIMATOR, NULL, TASK_PRIO_ALT_ESTIMATOR, NULL);
 	//xTaskCreate(MagTask, "MAG", STACK_MAG, NULL, TASK_PRIO_MAG, NULL);
-    xTaskCreate(MagBaroTask, "MAGBARO", STACK_MAGBARO, NULL, TASK_PRIO_MAGBARO, NULL);
+	xTaskCreate(MagBaroTask, "MAGBARO", STACK_MAGBARO, NULL, TASK_PRIO_MAGBARO, NULL);
 	vTaskStartScheduler();
 
   /* USER CODE END 2 */
