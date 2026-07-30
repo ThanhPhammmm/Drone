@@ -4,6 +4,7 @@
 #include "rate_setpoint_topic.h"
 #include "attitude_setpoint_topic.h"
 #include "mag_topic.h"
+#include "baro_topic.h"
 #include "arm.h"
 #include "motor_output.h"
 
@@ -13,6 +14,7 @@ void App_Init(void){
     RateSetpointTopic_Init();
     AttitudeSetpointTopic_Init();
     MagTopic_Init();
+    BaroTopic_Init();
 
     Arm_Init();
     MotorOutput_Init();
