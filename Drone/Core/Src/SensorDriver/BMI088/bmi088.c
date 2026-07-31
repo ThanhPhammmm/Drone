@@ -216,41 +216,21 @@ void BMI088_ParseData(void){
 }
 
 void BMI088_Convert(void){
-    bmi088.data.accel.x =
-        bmi088.data.accel_raw.x *
-        accSensitivity *
-        BMI088_G -
-        bmi088.calib.accel_bias.x;
+    float ax = -(bmi088.data.accel_raw.x * accSensitivity * BMI088_G);
+    float ay =  (bmi088.data.accel_raw.y * accSensitivity * BMI088_G);
+    float az = -(bmi088.data.accel_raw.z * accSensitivity * BMI088_G);
 
-    bmi088.data.accel.y =
-        bmi088.data.accel_raw.y *
-        accSensitivity *
-        BMI088_G -
-        bmi088.calib.accel_bias.y;
+    bmi088.data.accel.x = ax - bmi088.calib.accel_bias.x;
+    bmi088.data.accel.y = ay - bmi088.calib.accel_bias.y;
+    bmi088.data.accel.z = az - bmi088.calib.accel_bias.z;
 
-    bmi088.data.accel.z =
-        bmi088.data.accel_raw.z *
-        accSensitivity *
-        BMI088_G -
-        bmi088.calib.accel_bias.z;
+    float gx = -(bmi088.data.gyro_raw.x * gyroSensitivity * DEG2RAD);
+    float gy =  (bmi088.data.gyro_raw.y * gyroSensitivity * DEG2RAD);
+    float gz = -(bmi088.data.gyro_raw.z * gyroSensitivity * DEG2RAD);
 
-    bmi088.data.gyro.x =
-        bmi088.data.gyro_raw.x *
-        gyroSensitivity *
-        DEG2RAD -
-        bmi088.calib.gyro_bias.x;
-
-    bmi088.data.gyro.y =
-        bmi088.data.gyro_raw.y *
-        gyroSensitivity *
-        DEG2RAD -
-        bmi088.calib.gyro_bias.y;
-
-    bmi088.data.gyro.z =
-        bmi088.data.gyro_raw.z *
-        gyroSensitivity *
-        DEG2RAD -
-        bmi088.calib.gyro_bias.z;
+    bmi088.data.gyro.x = gx - bmi088.calib.gyro_bias.x;
+    bmi088.data.gyro.y = gy - bmi088.calib.gyro_bias.y;
+    bmi088.data.gyro.z = gz - bmi088.calib.gyro_bias.z;
 }
 
 BMI088_Status_t BMI088_Calibrate(uint32_t numSamples){

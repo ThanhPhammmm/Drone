@@ -66,9 +66,9 @@ void Mahony_Update(Mahony_t *m, const BMI088_Data_t *imu, const float mag[3], ui
     float ex = 0.0f, ey = 0.0f, ez = 0.0f;
 
     if(accValid){
-        float vx = 2.0f*(q1*q3 - q0*q2);
-        float vy = 2.0f*(q0*q1 + q2*q3);
-        float vz = q0*q0 - q1*q1 - q2*q2 + q3*q3;
+        float vx = -2.0f*(q1*q3 - q0*q2);
+        float vy = -2.0f*(q0*q1 + q2*q3);
+        float vz = -(q0*q0 - q1*q1 - q2*q2 + q3*q3);
 
         ex = ay*vz - az*vy;
         ey = az*vx - ax*vz;
