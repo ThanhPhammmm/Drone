@@ -40,6 +40,8 @@
 #include "rate_controller_task.h"
 #include "magbaro_task.h"
 #include "altitude_estimator_task.h"
+#include "rc_task.h"
+#include "nrf24.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -98,6 +100,11 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
     if(bmi088.imuTask == NULL) return;
 
+    if(GPIO_Pin == NRF24_IRQ_PIN){
+        NRF24_IRQ_Handler();
+        return;
+    }
+
     BaseType_t hpw = pdFALSE;
 
     if(GPIO_Pin == BMI088_GYRO_INT_Pin && bmi088.gyroReady == false){
@@ -153,6 +160,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_TIM4_Init();
   MX_I2C2_Init();
+  MX_SPI2_Init();
   /* USER CODE BEGIN 2 */
   App_Init();
 
@@ -162,7 +170,8 @@ int main(void)
 	xTaskCreate(RateControllerTask, "RATECTRL", STACK_RATE, NULL, TASK_PRIO_RATE, NULL);
 	xTaskCreate(AltitudeEstimatorTask, "ALTEST", STACK_ALT_ESTIMATOR, NULL, TASK_PRIO_ALT_ESTIMATOR, NULL);
 	//xTaskCreate(MagTask, "MAG", STACK_MAG, NULL, TASK_PRIO_MAG, NULL);
-	xTaskCreate(MagBaroTask, "MAGBARO", STACK_MAGBARO, NULL, TASK_PRIO_MAGBARO, NULL);
+    xTaskCreate(MagBaroTask, "MAGBARO", STACK_MAGBARO, NULL, TASK_PRIO_MAGBARO, NULL);
+    xTaskCreate(RCTask, "RC", STACK_RC, NULL, TASK_PRIO_RC, NULL);
 	vTaskStartScheduler();
 
   /* USER CODE END 2 */
