@@ -7,6 +7,7 @@
 #define TASK_PRIO_RATE				3
 #define TASK_PRIO_ATTITUDE_CTRL		2
 #define TASK_PRIO_MIXER				2
+#define TASK_PRIO_MAGBARO			1
 
 #define STACK_IMU					512
 #define STACK_MAG					384
@@ -14,6 +15,7 @@
 #define STACK_ATTITUDE_CTRL			512
 #define STACK_RATE					512
 #define STACK_MIXER					256
+#define STACK_MAGBARO				512
 
 void App_Init(void);
 

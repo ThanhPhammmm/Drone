@@ -38,7 +38,7 @@ QMC5883_Status_t QMC5883_Init(void){
     uint8_t ctrl2 = QMC5883_RNG_8G | QMC5883_SETRESET_ON;
     if(QMC5883_WriteReg(QMC5883_REG_CTRL2, ctrl2) != QMC5883_OK) return QMC5883_ERROR;
 
-    uint8_t ctrl1 = QMC5883_OSR2_8 | QMC5883_OSR1_8 | QMC5883_MODE_CONTINUOUS;
+    uint8_t ctrl1 = QMC5883_OSR2_8 | QMC5883_OSR1_8 | QMC5883_ODR_100HZ | QMC5883_MODE_CONTINUOUS;
     if(QMC5883_WriteReg(QMC5883_REG_CTRL1, ctrl1) != QMC5883_OK) return QMC5883_ERROR;
 
     qmc5883.calib.offset[0] = 0.0f;
@@ -50,10 +50,6 @@ QMC5883_Status_t QMC5883_Init(void){
 }
 
 QMC5883_Status_t QMC5883_Read(void){
-    uint8_t status = 0;
-    if(QMC5883_ReadRegs(QMC5883_REG_STATUS, &status, 1) != QMC5883_OK) return QMC5883_ERROR;
-    if(!(status & QMC5883_STATUS_DRDY)) return QMC5883_TIMEOUT;
-
     uint8_t buf[6];
     if(QMC5883_ReadRegs(QMC5883_REG_DATA_X_LSB, buf, 6) != QMC5883_OK) return QMC5883_ERROR;
 
