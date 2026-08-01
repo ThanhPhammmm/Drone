@@ -86,16 +86,16 @@ void AttitudeEstimatorTask(void *argument){
 		attitude->gyroBiasY = mahony.bias[1];
 		attitude->gyroBiasZ = mahony.bias[2];
 
-        float q0 = attitude->q0, q1 = attitude->q1;
-        float q2 = attitude->q2, q3 = attitude->q3;
-
-        float rx = 2.0f * (q1*q3 - q0*q2);
-        float ry = 2.0f * (q0*q1 + q2*q3);
-        float rz = q0*q0 - q1*q1 - q2*q2 + q3*q3;
-
-        float fDown = rx*ax + ry*ay + rz*az;
-
-        attitude->accelUp = -(fDown + BMI088_G);
+//        float q0 = attitude->q0, q1 = attitude->q1;
+//        float q2 = attitude->q2, q3 = attitude->q3;
+//
+//        float rx = 2.0f * (q1*q3 - q0*q2);
+//        float ry = 2.0f * (q0*q1 + q2*q3);
+//        float rz = q0*q0 - q1*q1 - q2*q2 + q3*q3;
+//
+//        float fDown = rx*ax + ry*ay + rz*az;
+//
+//        attitude->accelUp = -(fDown + BMI088_G);
 
         attitude->dt = imu.dt;
 		attitude->timestamp_us = imu.timestamp_us;

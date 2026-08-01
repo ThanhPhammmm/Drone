@@ -8,6 +8,7 @@
 #include "arm.h"
 #include "motor_output.h"
 #include "altitude_topic.h"
+#include "rc_topic.h"
 
 void App_Init(void){
     IMUTopic_Init();
@@ -17,6 +18,7 @@ void App_Init(void){
     MagTopic_Init();
     BaroTopic_Init();
     AltitudeTopic_Init();
+    RCTopic_Init();
 
     Arm_Init();
     MotorOutput_Init();
