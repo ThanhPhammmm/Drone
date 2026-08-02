@@ -25,6 +25,8 @@ typedef struct{
     float gyroBiasY;
     float gyroBiasZ;
 
+    float accelUp;
+
     float dt;
 
     uint32_t timestamp_us;
