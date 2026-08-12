@@ -9,7 +9,6 @@ typedef struct{
     Thrust_Data_t data;
     TaskHandle_t  controllerTask;
 
-    /* exposed for debugger inspection while tuning */
     float holdTarget;       /* m, commanded altitude */
     float vzSetpoint;       /* m/s */
 } AltitudeController_Handle_t;

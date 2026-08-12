@@ -6,15 +6,9 @@
 
 typedef struct{
     float climbRate;
-
-    /* Raw throttle 0..1, used directly whenever hold is disengaged. */
     float manualThrust;
-
-    /* 1 = closed-loop altitude hold, 0 = manual thrust passthrough. */
     uint8_t holdEnabled;
-
     uint32_t timestamp_us;
-
 } AltitudeSetpoint_Data_t;
 
 extern MutexTopic_t altitudeSetpointTopic;

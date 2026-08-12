@@ -81,7 +81,7 @@ BMI088_Status_t BMI088_Acc_WriteReg(uint8_t reg, uint8_t data){
 
 BMI088_Status_t BMI088_Acc_ReadReg(uint8_t reg, uint8_t *data){
     txBuf[0] = reg | BMI088_READ_BITMASK;
-    txBuf[1] = 0;
+    txBuf[1] = 0; // dummy byte for clock : 1 byte sent from master -> 1 byte sent back from slave.
     txBuf[2] = 0;
 
     memset(txBuf + 3, 0, sizeof(txBuf) - 3);
@@ -145,7 +145,7 @@ BMI088_Status_t BMI088_Gyro_WriteReg(uint8_t reg, uint8_t data){
 
 BMI088_Status_t BMI088_Gyro_ReadReg(uint8_t reg, uint8_t *data){
     txBuf[0] = reg | BMI088_READ_BITMASK;
-    txBuf[1] = 0;
+    txBuf[1] = 0; // dummy byte for clock
 
     memset(txBuf + 2, 0, sizeof(txBuf) - 2);
     memset(rxBuf, 0, sizeof(rxBuf));

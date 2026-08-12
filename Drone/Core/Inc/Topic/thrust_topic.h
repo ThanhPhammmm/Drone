@@ -6,12 +6,8 @@
 
 typedef struct{
     float thrust;
-
-    /* 1 = produced by closed-loop altitude hold, 0 = manual passthrough */
     uint8_t holdActive;
-
     uint32_t timestamp_us;
-
 } Thrust_Data_t;
 
 extern MutexTopic_t thrustTopic;
