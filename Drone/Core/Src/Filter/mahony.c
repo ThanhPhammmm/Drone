@@ -44,7 +44,9 @@ void Mahony_Init(Mahony_t *m, float kp,float ki){
 }
 
 void Mahony_Update(Mahony_t *m, const BMI088_Data_t *imu, const float mag[3], uint8_t magValid){
-    float ax = imu->accel.x, ay = imu->accel.y, az = imu->accel.z;
+    float ax = imu->accel.x;
+    float ay = imu->accel.y;
+    float az = imu->accel.z;
     float dt = imu->dt;
 
     if(!(dt > 0.0f) || dt > MAHONY_DT_MAX){
@@ -63,9 +65,12 @@ void Mahony_Update(Mahony_t *m, const BMI088_Data_t *imu, const float mag[3], ui
     float q2 = m->q[2];
     float q3 = m->q[3];
 
-    float ex = 0.0f, ey = 0.0f, ez = 0.0f;
+    float ex = 0.0f;
+    float ey = 0.0f;
+    float ez = 0.0f;
 
     if(accValid){
+        // predicted direction of gravity
         float vx = -2.0f*(q1*q3 - q0*q2);
         float vy = -2.0f*(q0*q1 + q2*q3);
         float vz = -(q0*q0 - q1*q1 - q2*q2 + q3*q3);
@@ -75,13 +80,20 @@ void Mahony_Update(Mahony_t *m, const BMI088_Data_t *imu, const float mag[3], ui
         ez = ax*vy - ay*vx;
     }
 
-    float mx = mag[0], my = mag[1], mz = mag[2];
+    float mx = mag[0];
+    float my = mag[1];
+    float mz = mag[2];
     if(magValid && normalize3(&mx, &my, &mz)){
+        // measured magnetic field → world frame
         float hx = 2.0f*mx*(0.5f - q2*q2 - q3*q3) + 2.0f*my*(q1*q2 - q0*q3) + 2.0f*mz*(q1*q3 + q0*q2);
         float hy = 2.0f*mx*(q1*q2 + q0*q3) + 2.0f*my*(0.5f - q1*q1 - q3*q3) + 2.0f*mz*(q2*q3 - q0*q1);
+
+        // magnetic reference field
+        // NED frame (North-East-Down) -> by = 0
         float bx = sqrtf(hx*hx + hy*hy);
         float bz = 2.0f*mx*(q1*q3 - q0*q2) + 2.0f*my*(q2*q3 + q0*q1) + 2.0f*mz*(0.5f - q1*q1 - q2*q2);
 
+        // reference magnetic field → body frame
         float wx = 2.0f*bx*(0.5f - q2*q2 - q3*q3) + 2.0f*bz*(q1*q3 - q0*q2);
         float wy = 2.0f*bx*(q1*q2 - q0*q3) + 2.0f*bz*(q0*q1 + q2*q3);
         float wz = 2.0f*bx*(q0*q2 + q1*q3) + 2.0f*bz*(0.5f - q1*q1 - q2*q2);
@@ -104,11 +116,8 @@ void Mahony_Update(Mahony_t *m, const BMI088_Data_t *imu, const float mag[3], ui
     float gz = m->rate[2] + m->kp * ez;
 
     float dq0 = 0.5f * (-q1*gx - q2*gy - q3*gz);
-
     float dq1 = 0.5f * ( q0*gx + q2*gz - q3*gy);
-
     float dq2 = 0.5f * ( q0*gy - q1*gz + q3*gx);
-
     float dq3 = 0.5f * ( q0*gz + q1*gy - q2*gx);
 
     q0 += dq0 * dt;

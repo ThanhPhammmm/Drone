@@ -5,9 +5,9 @@
 #include <stdint.h>
 
 typedef struct{
-    float    pressure_pa;
-    float    temperature_c;
-    float    altitude_m;
+    float    pressure_pa; // pascal
+    float    temperature_c; // celsius
+    float    altitude_m; // m
     uint32_t timestamp_us;
 } Baro_Data_t;
 

@@ -41,6 +41,7 @@ static BMP388_Status_t BMP388_ProbeAddress(void){
     return BMP388_INVALID_CHIP;
 }
 
+// The compensation formula is referred from datasheet
 static BMP388_Status_t BMP388_ReadCalib(void){
     uint8_t b[BMP388_CALIB_LEN];
     if(BMP388_ReadRegs(BMP388_REG_CALIB_DATA, b, BMP388_CALIB_LEN) != BMP388_OK){
@@ -90,6 +91,7 @@ BMP388_Status_t BMP388_Init(void){
 
     if(BMP388_ReadCalib() != BMP388_OK) return BMP388_ERROR;
 
+    // Temperature + Pressure
     if(BMP388_WriteReg(BMP388_REG_OSR, BMP388_OSR_P_8 | BMP388_OSR_T_1) != BMP388_OK) return BMP388_ERROR;
     if(BMP388_WriteReg(BMP388_REG_ODR, BMP388_ODR_50HZ) != BMP388_OK) return BMP388_ERROR;
     if(BMP388_WriteReg(BMP388_REG_CONFIG, BMP388_IIR_COEF_3) != BMP388_OK) return BMP388_ERROR;
@@ -107,6 +109,7 @@ BMP388_Status_t BMP388_Init(void){
     return BMP388_OK;
 }
 
+// The temparature compensation formula is referred from datasheet
 static void BMP388_CompensateTemperature(void){
     float d1 = (float)bmp388.raw.temperature - bmp388.calib.t1;
     float d2 = d1 * bmp388.calib.t2;
@@ -115,6 +118,7 @@ static void BMP388_CompensateTemperature(void){
     bmp388.temperature_c = bmp388.calib.t_lin;
 }
 
+// The pressure compensation formula is referred from datasheet
 static void BMP388_CompensatePressure(void){
     const float t  = bmp388.calib.t_lin;
     const float t2 = t * t;

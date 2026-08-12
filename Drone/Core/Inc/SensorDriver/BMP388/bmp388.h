@@ -8,9 +8,9 @@ typedef struct{
     BMP388_Calib_t     calib;
     BMP388_GroundRef_t groundRef;
 
-    float    pressure_pa;
-    float    temperature_c;
-    float    altitude_m;
+    float    pressure_pa; // pascal 
+    float    temperature_c; // celsius
+    float    altitude_m; // m
     uint8_t  addr;
 } BMP388_Handle_t;
 

@@ -5,7 +5,7 @@
 #include "task.h"
 #include <stdint.h>
 
-#define TOPIC_MAX_SUBSCRIBERS 10
+#define TOPIC_MAX_SUBSCRIBERS 20
 
 typedef struct{
     void*				buffer[2];

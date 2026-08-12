@@ -33,6 +33,7 @@ QMC5883_Status_t QMC5883_Init(void){
     if(QMC5883_WriteReg(QMC5883_REG_CTRL2, QMC5883_CTRL2_SOFT_RST) != QMC5883_OK) return QMC5883_ERROR;
     vTaskDelay(pdMS_TO_TICKS(10));
 
+    // Define the sign for X Y and Z axis
     if(QMC5883_WriteReg(QMC5883_REG_SIGN, 0x06) != QMC5883_OK) return QMC5883_ERROR;
 
     uint8_t ctrl2 = QMC5883_RNG_8G | QMC5883_SETRESET_ON;

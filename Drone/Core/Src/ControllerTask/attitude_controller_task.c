@@ -24,16 +24,16 @@ void AttitudeController_SetTaskHandle(TaskHandle_t handle){
 void AttitudeControllerTask(void *argument){
 	AttitudeController_SetTaskHandle(xTaskGetCurrentTaskHandle());
 
-	Attitude_Data_t attitude;
-	AttitudeSetpoint_Data_t setpoint;
+	Attitude_Data_t attitude = {0};
+	AttitudeSetpoint_Data_t setpoint = {0};
 
 	TickType_t last = xTaskGetTickCount();
 
 	while(1){
 		vTaskDelayUntil(&last, pdMS_TO_TICKS(ATTITUDE_CTRL_PERIOD_MS));
 
-		AttitudeTopic_Copy(&attitude);
-		AttitudeSetpointTopic_Copy(&setpoint);
+		if(AttitudeTopic_Copy(&attitude) != pdPASS) continue;
+		if(AttitudeSetpointTopic_Copy(&setpoint) != pdPASS) continue;
 
 		RateSetpoint_Data_t* rate = &attitudeController.data;
 
