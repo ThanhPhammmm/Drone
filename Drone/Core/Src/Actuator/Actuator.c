@@ -39,7 +39,7 @@ void MotorOutput_Init(void){
 }
 
 void MotorOutput_Update(float roll, float pitch, float yaw, float throttle){
-    if(arm_state != ARMED){
+	if(!Arm_MotorsAllowed()){
         for(uint8_t i = 0; i < MOTOR_COUNT; i++) motor_write(i, 0.0f);
         return;
     }

@@ -5,11 +5,13 @@
 #define TASK_PRIO_ATT_ESTIMATOR		4
 #define TASK_PRIO_ATTITUDE_CTRL		3
 #define TASK_PRIO_RATE				3
+#define TASK_PRIO_RC				3
 #define TASK_PRIO_MIXER				2
 #define TASK_PRIO_ALT_ESTIMATOR		2
 #define TASK_PRIO_ALT_CTRL		    2
 #define TASK_PRIO_MAGBARO			1
 #define TASK_PRIO_MAG				1
+
 
 #define STACK_IMU					512
 #define STACK_MAG					384
@@ -20,6 +22,7 @@
 #define STACK_MAGBARO				512
 #define STACK_ALT_ESTIMATOR			512
 #define STACK_ALT_CTRL			    512
+#define STACK_RC					512
 
 void App_Init(void);
 
