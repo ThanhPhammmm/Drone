@@ -2,6 +2,11 @@
 #define INC_SENSORDRIVER_BMP388_BMP388_H_
 
 #include "bmp388_data_types.h"
+#include "bmp388_reg.h"
+#include "i2c.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include <math.h>
 
 typedef struct{
     BMP388_Raw_t       raw;

@@ -1,19 +1,9 @@
 #include "rc_task.h"
-#include "nrf24.h"
-#include "rc_protocol.h"
-#include "rc_topic.h"
-#include "arm.h"
-#include "attitude_setpoint_topic.h"
-#include "altitude_setpoint_topic.h"
-#include "FreeRTOS.h"
-#include "task.h"
-#include <string.h>
-#include <stm32f4xx.h>
 
 /* The loop wakes on the radio IRQ but also on a timeout, because failsafe is
  * exactly the case where no interrupt is ever going to arrive. */
 #define RC_TICK_MS                  20
-#define RC_TIMEOUT_MS               300     /* no valid frame -> link lost */
+#define RC_TIMEOUT_MS               3000     /* no valid frame -> link lost */
 
 #define RC_ARM_THROTTLE_MAX         0.05f   /* must be at idle to arm */
 #define RC_FAILSAFE_DESCENT_MS      (-1.0f) /* m/s */
@@ -22,7 +12,7 @@
 #define RC_MAX_TILT_RAD             0.35f   /* ~20 deg at full stick */
 #define RC_MAX_YAW_RATE             3.0f    /* rad/s */
 #define RC_MAX_CLIMB_RATE           2.0f    /* m/s at full throttle deflection */
-#define RC_THROTTLE_DEADBAND        0.05f
+#define RC_THROTTLE_DEADBAND        0.1f
 
 static RC_Data_t rc;
 
@@ -79,7 +69,8 @@ void RCTask(void *argument){
              * rather than silently flying something the pilot did not pick. */
             rc.mode = (latest.mode == RC_MODE_ALT_HOLD) ? RC_MODE_ALT_HOLD
                                                         : RC_MODE_ANGLE;
-        }else{
+        }
+        else{
             rc.roll = rc.pitch = rc.yaw = 0.0f;
             /* rc.throttle deliberately retains its last value -- the blind
              * descent below needs it. */
@@ -87,7 +78,7 @@ void RCTask(void *argument){
 
         /* One authority for whether motors may spin. This task only reports
          * inputs; every transition rule lives in arm.c. */
-        uint8_t armRequest   = linkOk && (latest.flags & RC_FLAG_ARM);
+        uint8_t armRequest   = (latest.flags & RC_FLAG_ARM);
         uint8_t throttleIdle = (rc.throttle < RC_ARM_THROTTLE_MAX);
 
         Arm_Update(armRequest, throttleIdle, linkOk,
@@ -140,6 +131,8 @@ void RCTask(void *argument){
 
         attSp.timestamp_us = rc.timestamp_us;
         altSp.timestamp_us = rc.timestamp_us;
+
+        //RC_Print_Attitude_Setpoint(&rc, lastThrottle);
 
         RCTopic_Publish(&rc);
         AttitudeSetpointTopic_Publish(&attSp);

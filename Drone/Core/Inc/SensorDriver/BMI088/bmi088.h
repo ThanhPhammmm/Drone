@@ -3,6 +3,12 @@
 
 #include "bmi088_port.h"
 #include "bmi088_data_types.h"
+#include "bmi088_reg.h"
+#include "string.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "semphr.h"
+#include "math.h"
 
 #define BMI088_G			9.80665f
 #define DEG2RAD				0.017453292519943295f
@@ -28,5 +34,7 @@ BMI088_Status_t BMI088_GetData(BMI088_Data_t *imu);
 void BMI088_ParseData(void);
 void BMI088_Convert(void);
 BMI088_Status_t BMI088_Calibrate(uint32_t numSamples);
+void BMI088_Accel_Convert(void);
+void BMI088_Gyro_Convert(void);
 
 #endif /* INC_SENSORDRIVER_BMI088_BMI088_H_ */

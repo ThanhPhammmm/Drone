@@ -10,10 +10,9 @@
 #define RC_THROTTLE_MAX     1000        /* throttle:     0..1000  */
 
 typedef enum{
-    RC_MODE_RATE = 0,
-    RC_MODE_ANGLE,
-    RC_MODE_ALT_HOLD,
-    RC_MODE_COUNT
+	RC_MODE_ANGLE = 0,
+	RC_MODE_ALT_HOLD,
+	RC_MODE_POS_HOLD,
 } RC_Mode_t;
 
 #define RC_FLAG_ARM         0x01

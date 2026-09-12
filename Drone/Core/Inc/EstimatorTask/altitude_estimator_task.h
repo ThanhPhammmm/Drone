@@ -4,6 +4,9 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "altitude_topic.h"
+#include "baro_topic.h"
+#include "Const.h"
+#include "attitude_topic.h"
 
 typedef struct{
     Altitude_Data_t data;

@@ -1,9 +1,4 @@
 #include "bmp388.h"
-#include "bmp388_reg.h"
-#include "i2c.h"
-#include "FreeRTOS.h"
-#include "task.h"
-#include <math.h>
 
 #define BARO_I2C                    hi2c2
 #define BMP388_I2C_TIMEOUT_MS       10

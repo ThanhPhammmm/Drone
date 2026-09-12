@@ -2,6 +2,9 @@
 #define INC_STATE_ARM_H_
 
 #include <stdint.h>
+#include "main.h"
+#include "FreeRTOS.h"
+#include "task.h"
 
 typedef enum {
 	DISARMED = 0,

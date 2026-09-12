@@ -4,6 +4,13 @@
 #include <attitude_topic.h>
 #include "FreeRTOS.h"
 #include "task.h"
+#include "attitude_estimator_task.h"
+#include "mahony.h"
+#include "imu_topic.h"
+#include "mag_topic.h"
+#include "Const.h"
+#include <stdio.h>
+#include "bmi088.h"
 
 typedef struct {
 	Attitude_Data_t data;

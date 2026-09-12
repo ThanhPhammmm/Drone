@@ -1,8 +1,11 @@
 #include "qmc5883.h"
-#include "qmc5883_reg.h"
-#include "i2c.h"
-#include "FreeRTOS.h"
-#include "task.h"
+#include "debug.h"
+
+/*
+ * X: max positive decimal when pointing to North side
+ * Y: max positive decimal when pointing to South side
+ * Z: when flatting, it is always approximately 30 to 40
+ */
 
 #define MAG_I2C						hi2c2
 #define QMC5883_I2C_TIMEOUT_MS		10
@@ -55,12 +58,16 @@ QMC5883_Status_t QMC5883_Read(void){
     if(QMC5883_ReadRegs(QMC5883_REG_DATA_X_LSB, buf, 6) != QMC5883_OK) return QMC5883_ERROR;
 
     qmc5883.raw.x = (int16_t)((buf[1] << 8) | buf[0]);
-    qmc5883.raw.y = (int16_t)((buf[3] << 8) | buf[2]);
+    qmc5883.raw.y = -(int16_t)((buf[3] << 8) | buf[2]);
     qmc5883.raw.z = (int16_t)((buf[5] << 8) | buf[4]);
+
+    //QMC5883_PrintXYZ(&qmc5883.raw);
 
     qmc5883.field.x = ((float)qmc5883.raw.x - qmc5883.calib.offset[0]) / QMC5883_LSB_PER_GAUSS_8G;
     qmc5883.field.y = ((float)qmc5883.raw.y - qmc5883.calib.offset[1]) / QMC5883_LSB_PER_GAUSS_8G;
     qmc5883.field.z = ((float)qmc5883.raw.z - qmc5883.calib.offset[2]) / QMC5883_LSB_PER_GAUSS_8G;
+
+    //QMC5883_PrintXYZ_FIELD(&qmc5883.field);
 
     return QMC5883_OK;
 }

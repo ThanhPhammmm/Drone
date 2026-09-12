@@ -1,5 +1,4 @@
 #include "arm.h"
-#include "main.h"
 
 #define ARM_CONFIRM_MS          500     /* hold the switch this long to arm */
 #define ARM_FAILSAFE_DISARM_MS  5000    /* link lost this long -> cut motors */
@@ -7,7 +6,7 @@
 volatile arm_state_t arm_state = DISARMED;
 
 static uint8_t  prevArmRequest = 1;
-static uint32_t armingTick     = 0;
+static TickType_t armingTick     = 0;
 
 void Arm_Init(void){
     arm_state      = DISARMED;
@@ -27,7 +26,7 @@ void Arm_Update(uint8_t armRequest, uint8_t throttleIdle, uint8_t linkOk, uint32
     case DISARMED:
         if(linkOk && armRequest && !prevArmRequest && throttleIdle){
             arm_state  = ARMING;
-            armingTick = HAL_GetTick();
+            armingTick = xTaskGetTickCount();
         }
         break;
 
@@ -35,14 +34,14 @@ void Arm_Update(uint8_t armRequest, uint8_t throttleIdle, uint8_t linkOk, uint32
         if(!linkOk || !armRequest || !throttleIdle){
             arm_state = DISARMED;
         }
-        else if((HAL_GetTick() - armingTick) >= ARM_CONFIRM_MS){
+        else if((xTaskGetTickCount() - armingTick) >= ARM_CONFIRM_MS){
             arm_state = ARMED;
         }
         break;
 
     case ARMED:
-        if(!armRequest)   arm_state = DISARMED;     /* disarm is immediate */
-        else if(!linkOk)  arm_state = FAILSAFE;
+        if(!linkOk)             arm_state = DISARMED;     /* disarm is immediate */
+        else if(!armRequest)    arm_state = FAILSAFE;
         break;
 
     case FAILSAFE:

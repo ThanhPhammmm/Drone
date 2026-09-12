@@ -6,6 +6,9 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "bmi088_data_types.h"
+#include <string.h>
+#include "bmi088.h"
+#include "semphr.h"
 
 extern SPI_HandleTypeDef hspi1;
 
