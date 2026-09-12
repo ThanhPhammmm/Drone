@@ -10,6 +10,7 @@
 #include "altitude_topic.h"
 #include "thrust_topic.h"
 #include "rc_topic.h"
+#include "altitude_setpoint_topic.h"
 
 void App_Init(void){
     IMUTopic_Init();
@@ -21,6 +22,7 @@ void App_Init(void){
     AltitudeTopic_Init();
     ThrustTopic_Init();
     RCTopic_Init();
+    AltitudeSetpointTopic_Init();
 
     Arm_Init();
     MotorOutput_Init();

@@ -15,7 +15,7 @@
 #define RC_TICK_MS                  20
 #define RC_TIMEOUT_MS               300     /* no valid frame -> link lost */
 
-#define RC_ARM_THROTTLE_MAX         0.05f   /* must be at idle to arm */
+#define RC_ARM_THROTTLE_MAX         0.6f   /* must be at idle to arm */
 #define RC_FAILSAFE_DESCENT_MS      (-1.0f) /* m/s */
 #define RC_FAILSAFE_THRUST_SCALE    0.90f   /* blind descent if no baro */
 
