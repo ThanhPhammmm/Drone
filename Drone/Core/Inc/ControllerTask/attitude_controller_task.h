@@ -4,6 +4,10 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "rate_setpoint_topic.h"
+#include "attitude_topic.h"
+#include "attitude_setpoint_topic.h"
+#include "Const.h"
+#include "arm.h"
 
 typedef struct {
 	RateSetpoint_Data_t data;

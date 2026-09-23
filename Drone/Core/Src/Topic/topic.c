@@ -22,6 +22,8 @@ BaseType_t Topic_Publish(Topic_t *topic, const void *data){
     uint8_t spare = topic->write_index ^ 1u;
     memcpy(topic->buffer[spare], data, topic->size);
     __DMB();
+    topic->seq++;
+    __DMB();
     topic->write_index = spare;
     __DMB();
     topic->seq++;
@@ -42,6 +44,7 @@ BaseType_t Topic_Copy(Topic_t *topic, void *data){
 
     for(uint8_t attempt = 0; attempt < TOPIC_COPY_MAX_RETRIES; attempt++){
         s   = topic->seq;
+        if(s & 1u) continue;
         __DMB();
         idx = topic->write_index;
         memcpy(data, topic->buffer[idx], topic->size);

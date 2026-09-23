@@ -1,37 +1,10 @@
-#include <attitude_topic.h>
-#include "attitude_estimator_task.h"
-#include "mahony.h"
-#include "imu_topic.h"
-#include "mag_topic.h"
-#include "Const.h"
-#include <stdio.h>
-#include "bmi088.h"
+#include "attitude_topic.h"
+#include "debug.h"
 
 #define MAG_MAX_AGE_US   20000U
 
 static Mahony_t mahony;
 AttitudeEstimator_Handle_t attitudeEstimator;
-
-extern UART_HandleTypeDef huart1;
-void BMI088_PrintAttitude(const AttitudeEstimator_Handle_t* attitudeEstimator){
-	static char buf[128];
-	static uint32_t last_print_time = 0;
-	uint32_t current_time = HAL_GetTick();
-
-	if (current_time - last_print_time < 20)
-		return;
-
-	if (huart1.gState != HAL_UART_STATE_READY)
-		return;
-
-	int len = snprintf(buf, sizeof(buf),
-		"%.6f,%.6f,%.6f\r\n",
-		attitudeEstimator->data.roll,attitudeEstimator->data.pitch, attitudeEstimator->data.yaw);
-
-	if (HAL_UART_Transmit_DMA(&huart1, (uint8_t *)buf, len) == HAL_OK){
-		last_print_time = current_time;
-	}
-}
 
 void AttitudeEstimator_SetTaskHandle(TaskHandle_t handle){
 	attitudeEstimator.attitudeTask = handle;
@@ -104,6 +77,6 @@ void AttitudeEstimatorTask(void *argument){
 		attitude->timestamp_us = imu.timestamp_us;
 
 		AttitudeTopic_Publish(attitude);
-		BMI088_PrintAttitude(&attitudeEstimator);
+		//BMI088_PrintAttitude(attitude);
     }
 }

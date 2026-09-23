@@ -4,6 +4,13 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "thrust_topic.h"
+#include "altitude_topic.h"
+#include "altitude_setpoint_topic.h"
+#include "attitude_topic.h"
+#include "thrust_topic.h"
+#include "pid.h"
+#include <math.h>
+#include "arm.h"
 
 typedef struct{
     Thrust_Data_t data;

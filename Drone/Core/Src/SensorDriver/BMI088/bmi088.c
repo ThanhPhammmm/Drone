@@ -1,11 +1,12 @@
 #include "bmi088.h"
-#include "bmi088_reg.h"
-#include "bmi088_port.h"
-#include "string.h"
-#include "FreeRTOS.h"
-#include "task.h"
-#include "semphr.h"
-#include "math.h"
+#include "debug.h"
+
+/*
+ * FRD convention
+ * X: front, y: Right, Z: down
+ * Gyro: x > 0: roll right ; y > 0: pitch up ; z > 0: yaw right
+ * Accel: x > 0: nose down, y > 0: tilt right, z > 0: acceleration downward
+ */
 
 static uint8_t gyroTx[8];
 static uint8_t gyroRx[8];
@@ -17,8 +18,8 @@ static uint8_t accelRx[8];
 BMI088_Handle_t bmi088;
 extern SemaphoreHandle_t imuDmaSem;
 
-static float accSensitivity = 24.0f / 32768.0f;
-static float gyroSensitivity = 2000.0f / 32768.0f;
+static float accSensitivity = 24.0f / 32768.0f; // Accel ±24 g: 1365 LSB/g
+static float gyroSensitivity = 2000.0f / 32768.0f; // Gyro ±2000 °/s: 16.384 LSB/(°/s)
 
 static void BMI088_EnableSPI(void){
     uint8_t dummy;
@@ -216,6 +217,9 @@ void BMI088_ParseData(void){
 }
 
 void BMI088_Convert(void){
+
+	//BMI088_Print_RawData(&bmi088.data);
+
     float ax = -(bmi088.data.accel_raw.x * accSensitivity * BMI088_G);
     float ay =  (bmi088.data.accel_raw.y * accSensitivity * BMI088_G);
     float az = -(bmi088.data.accel_raw.z * accSensitivity * BMI088_G);
@@ -224,6 +228,29 @@ void BMI088_Convert(void){
     bmi088.data.accel.y = ay - bmi088.calib.accel_bias.y;
     bmi088.data.accel.z = az - bmi088.calib.accel_bias.z;
 
+    float gx = -(bmi088.data.gyro_raw.x * gyroSensitivity * DEG2RAD);
+    float gy =  (bmi088.data.gyro_raw.y * gyroSensitivity * DEG2RAD);
+    float gz = -(bmi088.data.gyro_raw.z * gyroSensitivity * DEG2RAD);
+
+    bmi088.data.gyro.x = gx - bmi088.calib.gyro_bias.x;
+    bmi088.data.gyro.y = gy - bmi088.calib.gyro_bias.y;
+    bmi088.data.gyro.z = gz - bmi088.calib.gyro_bias.z;
+
+    //BMI088_PrintDataCSV(&bmi088.data);
+
+}
+
+void BMI088_Accel_Convert(void){
+    float ax = -(bmi088.data.accel_raw.x * accSensitivity * BMI088_G);
+    float ay =  (bmi088.data.accel_raw.y * accSensitivity * BMI088_G);
+    float az = -(bmi088.data.accel_raw.z * accSensitivity * BMI088_G);
+
+    bmi088.data.accel.x = ax - bmi088.calib.accel_bias.x;
+    bmi088.data.accel.y = ay - bmi088.calib.accel_bias.y;
+    bmi088.data.accel.z = az - bmi088.calib.accel_bias.z;
+}
+
+void BMI088_Gyro_Convert(void){
     float gx = -(bmi088.data.gyro_raw.x * gyroSensitivity * DEG2RAD);
     float gy =  (bmi088.data.gyro_raw.y * gyroSensitivity * DEG2RAD);
     float gz = -(bmi088.data.gyro_raw.z * gyroSensitivity * DEG2RAD);

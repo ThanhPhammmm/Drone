@@ -1,10 +1,4 @@
 #include "altitude_controller_task.h"
-#include "altitude_topic.h"
-#include "altitude_setpoint_topic.h"
-#include "attitude_topic.h"
-#include "thrust_topic.h"
-#include "pid.h"
-#include <math.h>
 
 #define ALT_CTRL_RATE_HZ        100
 #define ALT_CTRL_PERIOD_MS      (1000 / ALT_CTRL_RATE_HZ)
@@ -24,11 +18,13 @@
 #define HOVER_THRUST            0.35f   /* Not yet done, neet to do inspection*/
 
 #define THRUST_MIN              0.10f
-#define THRUST_MAX              0.85f
+#define THRUST_MAX              0.95f
 #define TILT_COMP_MIN           0.5f
 
 #define BARO_LOSS_LIMIT_CYCLES  50      /* 0.5 s at 100 Hz */
 #define ALT_CTRL_COPY_TIMEOUT   pdMS_TO_TICKS(2)
+
+extern volatile arm_state_t arm_state;
 
 AltitudeController_Handle_t altitudeController;
 
@@ -113,8 +109,12 @@ void AltitudeControllerTask(void *argument){
             if(tiltComp < TILT_COMP_MIN) tiltComp = TILT_COMP_MIN;
             thrust /= tiltComp;
         }
-        if(thrust > THRUST_MAX) thrust = THRUST_MAX;
-        if(thrust < THRUST_MIN) thrust = THRUST_MIN;
+        if(arm_state == ARMED && thrust > THRUST_MAX){
+            thrust = THRUST_MAX;
+        }
+        else if(arm_state == ARMED && thrust < THRUST_MIN){
+            thrust = THRUST_MIN;
+        }
 
         Thrust_Data_t *out = &altitudeController.data;
         out->thrust       = thrust;

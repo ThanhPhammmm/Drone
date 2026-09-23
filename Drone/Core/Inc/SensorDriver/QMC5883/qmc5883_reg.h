@@ -13,8 +13,7 @@
 #define QMC5883_REG_STATUS           0x09
 #define QMC5883_REG_CTRL1            0x0A
 #define QMC5883_REG_CTRL2            0x0B
-#define QMC5883_REG_SIGN             0x29   /* not in the register table, but every
-                                                setup example writes 0x06 here first */
+#define QMC5883_REG_SIGN             0x29   /* not in the register table, but every setup example writes 0x06 here first */
 
 #define QMC5883_CHIP_ID_VALUE        0x80
 #define QMC5883_STATUS_DRDY          0x01

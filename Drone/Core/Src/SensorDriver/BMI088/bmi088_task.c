@@ -1,15 +1,8 @@
 #include "bmi088_task.h"
-#include "bmi088.h"
-#include "string.h"
-#include "stdio.h"
-#include "semphr.h"
-#include "imu_topic.h"
-#include "Const.h"
-#include "lpf.h"
 
 extern BMI088_Handle_t bmi088;
-extern UART_HandleTypeDef huart1;
 extern volatile uint32_t gyro_dt;
+extern UART_HandleTypeDef huart1;
 
 SemaphoreHandle_t imuDmaSem;
 #define GYRO_LPF_CUTOFF_HZ				90.0f   /* 80-100Hz */
@@ -17,55 +10,8 @@ SemaphoreHandle_t imuDmaSem;
 
 #ifdef DEBUG
 #define LOG_SIZE 500
-static BMI088_Data_t logBuf[LOG_SIZE];
-static uint32_t logIdx = 0;
-#endif
-
-#ifdef DEBUG
-void BMI088_PrintData(const uint32_t *gyro_count, const uint32_t *accel_count, const volatile uint32_t *imu_dt, const BMI088_Data_t *imu){
-	static char buf[128];
-	static uint32_t last_print_time = 0;
-	uint32_t current_time = HAL_GetTick();
-
-	if (current_time - last_print_time < 500)
-		return;
-
-	if (huart1.gState != HAL_UART_STATE_READY)
-		return;
-
-	int len = snprintf(buf, sizeof(buf),
-		"gyro_count = %lu, accel_count = %lu, dt = %lu - ACC: %.3f %.3f %.3f | GYR: %.3f %.3f %.3f\r\n",
-		*gyro_count, *accel_count, *imu_dt,
-		imu->accel.x, imu->accel.y, imu->accel.z,
-		imu->gyro.x,  imu->gyro.y,  imu->gyro.z);
-
-	if (HAL_UART_Transmit_DMA(&huart1, (uint8_t *)buf, len) == HAL_OK){
-		last_print_time = current_time;
-	}
-}
-
-void BMI088_PrintDataCSV(const BMI088_Data_t *imu){
-	static char buf[128];
-	static uint32_t last_print_time = 0;
-	uint32_t current_time = HAL_GetTick();
-
-	if (current_time - last_print_time < 1000)
-		return;
-
-	if (huart1.gState != HAL_UART_STATE_READY)
-		return;
-
-	int len = snprintf(buf, sizeof(buf),
-		"%lu,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
-		imu->timestamp_us,
-		imu->accel.x, imu->accel.y, imu->accel.z,
-		imu->gyro.x,  imu->gyro.y,  imu->gyro.z);
-
-	if (HAL_UART_Transmit_DMA(&huart1, (uint8_t *)buf, len) == HAL_OK){
-		last_print_time = current_time;
-	}
-}
-
+//static BMI088_Data_t logBuf[LOG_SIZE];
+//static uint32_t logIdx = 0;
 #endif
 
 static BaseType_t  IMU_Signal_Init(void) {
@@ -80,15 +26,16 @@ void IMUTask(void *argument){
     if(BMI088_Init() != BMI088_OK) vTaskDelete(NULL);
 
     BMI088_Status_t calibStatus = BMI088_Calibrate(BMI088_CALIB_DEFAULT_SAMPLES);
-#ifdef DEBUG
-    if(huart1.gState == HAL_UART_STATE_READY){
-        const char *msg = (calibStatus == BMI088_OK)
-            ? "IMU calib OK\r\n"
-            : "IMU calib FAILED (board moved or SPI error)\r\n";
-        HAL_UART_Transmit_DMA(&huart1, (uint8_t *)msg, strlen(msg));
-    }
-    vTaskDelay(pdMS_TO_TICKS(5000));
-#endif
+    (void)calibStatus;
+//#ifdef DEBUG
+//    if(huart1.gState == HAL_UART_STATE_READY){
+//        const char *msg = (calibStatus == BMI088_OK)
+//            ? "IMU calib OK\r\n"
+//            : "IMU calib FAILED (board moved or SPI error)\r\n";
+//        HAL_UART_Transmit_DMA(&huart1, (uint8_t *)msg, strlen(msg));
+//    }
+//    vTaskDelay(pdMS_TO_TICKS(5000));
+//#endif
     static uint32_t lastCycle = 0;
     static uint32_t imuDt = 0;
     static uint8_t  dtValid = 0;
@@ -140,7 +87,14 @@ void IMUTask(void *argument){
             bmi088.data.accel_updated = true;
         }
 
-        BMI088_Convert();
+        //BMI088_Convert(); Comment for now
+
+        if(bmi088.data.gyro_updated){
+        	BMI088_Gyro_Convert();
+        }
+        if(bmi088.data.accel_updated){
+        	BMI088_Accel_Convert();
+        }
 
         if(bmi088.data.gyro_updated){
             bmi088.data.gyro.x = LPF_Update(&gyroLPF[0], bmi088.data.gyro.x, bmi088.data.dt);

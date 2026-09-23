@@ -1,13 +1,5 @@
 #include "rate_controller_task.h"
-#include "rate_setpoint_topic.h"
-#include "pid.h"
-#include "Const.h"
-#include "attitude_topic.h"
-#include "motor_output.h"
-#include "arm.h"
-#include <stm32f4xx_hal.h>
-#include <stdio.h>
-#include "thrust_topic.h"
+#include "debug.h"
 
 #define RATE_PID_KP_ROLL		0.31610f
 #define RATE_PID_KI_ROLL		0.01132f
@@ -24,7 +16,7 @@
 #define RATE_PID_INTEGRAL_LIMIT	3.0f
 #define RATE_PID_OUTPUT_LIMIT	0.4f
 #define RATE_PID_D_CUTOFF_HZ	40.0f
-#define RATE_SETPOINT_MAX_AGE_US	100000U
+#define RATE_SETPOINT_MAX_AGE_US	16000U
 
 RateController_Handle_t rateController;
 volatile float g_throttle = 0.0f;
@@ -34,27 +26,6 @@ static float lastThrust = 0.0f;
 static PID_t rollRatePID;
 static PID_t pitchRatePID;
 static PID_t yawRatePID;
-
-extern UART_HandleTypeDef huart1;
-void BMI088_PrintRate(const RateController_Handle_t* rateController){
-	static char buf[128];
-	static uint32_t last_print_time = 0;
-	uint32_t current_time = HAL_GetTick();
-
-	if (current_time - last_print_time < 1000)
-		return;
-
-	if (huart1.gState != HAL_UART_STATE_READY)
-		return;
-
-	int len = snprintf(buf, sizeof(buf),
-		"%.6f,%.6f,%.6f\r\n",
-		rateController->rollTorqueOutput,rateController->pitchTorqueOutput, rateController->yawTorqueOutput);
-
-	if (len > 0 && HAL_UART_Transmit_DMA(&huart1, (uint8_t *)buf, (uint16_t)len) == HAL_OK){
-		last_print_time = current_time;
-	}
-}
 
 void RateController_SetTaskHandle(TaskHandle_t handle){
 	rateController.controllerTask = handle;
@@ -93,6 +64,7 @@ void RateControllerTask(void *argument){
 
 	    if(arm_state != ARMED){
 	      RateController_Idle();
+	      lastThrust = 0;
 	      continue;
 	    }
 
@@ -102,7 +74,6 @@ void RateControllerTask(void *argument){
 			setpoint.pitchRate = 0.0f;
 			setpoint.yawRate   = 0.0f;
 		}
-
 		rateController.rollTorqueOutput  = PID_Update(&rollRatePID,  setpoint.rollRate,  attitude.rollRate,  attitude.dt);
 		rateController.pitchTorqueOutput = PID_Update(&pitchRatePID, setpoint.pitchRate, attitude.pitchRate, attitude.dt);
 		rateController.yawTorqueOutput   = PID_Update(&yawRatePID,   setpoint.yawRate,   attitude.yawRate,   attitude.dt);
@@ -110,7 +81,8 @@ void RateControllerTask(void *argument){
         if(ThrustTopic_Copy(&thrust, 0) == pdPASS){
             lastThrust = thrust.thrust;
         }
-		//BMI088_PrintRate(&rateController);
+		//Motor_Setpoint_Print(&setpoint, lastThrust);
+		Motor_Torque_Print(&rateController, lastThrust);
 		//MotorOutput_Update(rateController.rollTorqueOutput, rateController.pitchTorqueOutput, rateController.yawTorqueOutput, g_throttle);
         MotorOutput_Update(rateController.rollTorqueOutput, rateController.pitchTorqueOutput, rateController.yawTorqueOutput, lastThrust);
 	}

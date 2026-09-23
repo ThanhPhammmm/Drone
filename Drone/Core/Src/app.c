@@ -9,8 +9,14 @@
 #include "motor_output.h"
 #include "altitude_topic.h"
 #include "thrust_topic.h"
+#include "rc_topic.h"
+#include "altitude_setpoint_topic.h"
 
 void App_Init(void){
+	/*
+	 * Add inspections in the future
+	 */
+
     IMUTopic_Init();
     AttitudeTopic_Init();
     RateSetpointTopic_Init();
@@ -19,6 +25,8 @@ void App_Init(void){
     BaroTopic_Init();
     AltitudeTopic_Init();
     ThrustTopic_Init();
+    RCTopic_Init();
+    AltitudeSetpointTopic_Init();
 
     Arm_Init();
     MotorOutput_Init();

@@ -1,17 +1,15 @@
 #include "altitude_estimator_task.h"
-#include "attitude_topic.h"
-#include "baro_topic.h"
-#include "altitude_topic.h"
-#include "Const.h"
 
-#define ALT_EST_OMEGA               1.0f
+#define ALT_EST_OMEGA               2.0f
 #define ALT_EST_K1                  (3.0f * ALT_EST_OMEGA)
 #define ALT_EST_K2                  (3.0f * ALT_EST_OMEGA * ALT_EST_OMEGA)
 #define ALT_EST_K3                  (ALT_EST_OMEGA * ALT_EST_OMEGA * ALT_EST_OMEGA)
 
-#define ALT_EST_BARO_MAX_AGE_US     200000U
+#define ALT_EST_BARO_MAX_AGE_US     30000U
 #define ALT_EST_ACCEL_BIAS_LIMIT    2.0f      /* m/s^2 */
 #define ALT_EST_DT_MAX              0.01f
+
+#define ALT_EST_DECIMATE            10U
 
 AltitudeEstimator_Handle_t altitudeEstimator;
 
@@ -21,7 +19,7 @@ void AltitudeEstimator_SetTaskHandle(TaskHandle_t handle){
 
 void AltitudeEstimatorTask(void *argument){
 	AltitudeEstimator_SetTaskHandle(xTaskGetCurrentTaskHandle());
-	AttitudeTopic_Subscribe(altitudeEstimator.altitudeTask, ALTITUDE_ATTITUDE_ID_TASK);
+	AttitudeTopic_Subscribe(altitudeEstimator.altitudeTask, ALTITUDE_ESTIMATOR_ID_TASK);
 
     Attitude_Data_t attitude;
     Baro_Data_t     baro;
@@ -29,13 +27,22 @@ void AltitudeEstimatorTask(void *argument){
     float z = 0.0f, vz = 0.0f, accelBias = 0.0f;
     uint8_t initialized = 0;
 
+    uint32_t decimateCount = 0;
+    float    dtAcc         = 0.0f;
+
     while(1){
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
         if(AttitudeTopic_Copy(&attitude) != pdPASS) continue;
 
-        float dt = attitude.dt;
-        if(dt <= 0.0f || dt > ALT_EST_DT_MAX) continue;
+        float sampleDt = attitude.dt;
+        if(sampleDt <= 0.0f || sampleDt > ALT_EST_DT_MAX) continue;
+
+        dtAcc += sampleDt;
+        if(++decimateCount < ALT_EST_DECIMATE) continue;
+        decimateCount = 0;
+        float dt = dtAcc;
+        dtAcc = 0.0f;
 
         uint8_t baroFresh = 0;
         if(BaroTopic_Copy(&baro, 0) == pdPASS && baro.timestamp_us != 0){

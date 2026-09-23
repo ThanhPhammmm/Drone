@@ -1,9 +1,4 @@
-#include "FreeRTOS.h"
-#include "task.h"
-#include <string.h>
 #include "bmi088_port.h"
-#include "bmi088.h"
-#include "semphr.h"
 
 uint8_t txBuf[8];
 uint8_t rxBuf[8];

@@ -2,6 +2,10 @@
 #define INC_SENSORDRIVER_QMC5883_QMC5883_H_
 
 #include "qmc5883_data_types.h"
+#include "qmc5883_reg.h"
+#include "i2c.h"
+#include "FreeRTOS.h"
+#include "task.h"
 
 typedef struct{
     QMC5883_Raw_t	raw;

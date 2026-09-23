@@ -1,11 +1,4 @@
 #include "magbaro_task.h"
-#include "qmc5883.h"
-#include "bmp388.h"
-#include "mag_topic.h"
-#include "baro_topic.h"
-#include "FreeRTOS.h"
-#include "task.h"
-#include <stm32f4xx.h>
 
 #define MAGBARO_TASK_RATE_HZ     100
 #define MAGBARO_TASK_PERIOD_MS   (1000 / MAGBARO_TASK_RATE_HZ)

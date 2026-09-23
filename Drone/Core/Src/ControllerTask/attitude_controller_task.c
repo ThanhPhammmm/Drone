@@ -1,8 +1,20 @@
 #include "attitude_controller_task.h"
-#include "attitude_topic.h"
-#include "attitude_setpoint_topic.h"
-#include "Const.h"
-#include "arm.h"
+#include "debug.h"
+
+/* ==========================================================
+ * 						PID TUNING
+ * ==========================================================
+ * Kp (Proportional - Present): Reacts to the current error.
+ *
+ * Ki (Integral - Past):
+ * 		-Accumulates past errors over time.
+ *		- Why motors spool up on the bench: Ki constantly adds
+ *      up tiny sensor noise because the static drone cannot
+ *      physically move to correct it (I-term windup).
+ *
+ * Kd (Derivative - Future): Reacts to the rate of change.
+ * 		- Acts as a damper/brake to prevent overshoot.
+ * ========================================================== */
 
 #define ATTITUDE_KP_ROLL			21.325f
 #define ATTITUDE_KP_PITCH			21.325f
@@ -12,7 +24,9 @@
 #define RATE_MAX_YAW				4.0f    /* ~229 deg/s */
 
 #define ATTITUDE_MAX_TILT			0.6f    /* ~34 deg */
-#define ATTITUDE_CTRL_PERIOD_MS		4       /* 250 Hz */
+#define ATTITUDE_CTRL_PERIOD_MS		2       /* 500hz
+
+ Hz */
 #define CLAMP(v, lo, hi)  ((v) < (lo) ? (lo) : ((v) > (hi) ? (hi) : (v)))
 
 AttitudeController_Handle_t attitudeController;
@@ -50,6 +64,8 @@ void AttitudeControllerTask(void *argument){
 			rate->rollRate  = ATTITUDE_KP_ROLL  * (rollCmd  - attitude.roll);
 			rate->pitchRate = ATTITUDE_KP_PITCH * (pitchCmd - attitude.pitch);
 			rate->yawRate   = setpoint.yawRate;   /* yaw commanded as rate directly */
+
+			//Attitude_Controller_Print(rate);
 
 			/* Rate Limiter */
 			rate->rollRate  = CLAMP(rate->rollRate,  -RATE_MAX_ROLL,  RATE_MAX_ROLL);
