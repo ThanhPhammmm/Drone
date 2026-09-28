@@ -343,3 +343,6 @@ BMI088_Status_t BMI088_Calibrate(uint32_t numSamples){
     return BMI088_OK;
 }
 
+uint8_t BMI088_IsCalibrated(void) {
+    return bmi088.calib.calibrated;
+}

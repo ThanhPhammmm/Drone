@@ -8,8 +8,8 @@
 
 #define TASK_PRIO_ALT_ESTIMATOR		4
 #define TASK_PRIO_ALT_CTRL			3
+#define TASK_PRIO_MAGBARO			3
 #define TASK_PRIO_RC				2
-#define TASK_PRIO_MAGBARO			2
 
 #define TASK_PRIO_MAG				1
 

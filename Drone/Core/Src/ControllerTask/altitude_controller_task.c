@@ -18,7 +18,7 @@
 #define HOVER_THRUST            0.35f   /* Not yet done, neet to do inspection*/
 
 #define THRUST_MIN              0.10f
-#define THRUST_MAX              0.95f
+#define THRUST_MAX              0.85f
 #define TILT_COMP_MIN           0.5f
 
 #define BARO_LOSS_LIMIT_CYCLES  50      /* 0.5 s at 100 Hz */
@@ -60,6 +60,9 @@ void AltitudeControllerTask(void *argument){
         uint8_t estimateUsable = altitude.valid && (baroLostCycles < BARO_LOSS_LIMIT_CYCLES);
         uint8_t wantHold = setpoint.holdEnabled && estimateUsable;
         float thrust;
+        float vzError = 0.0f;
+        uint8_t thrustSaturatedHigh = 0;
+        uint8_t thrustSaturatedLow  = 0;
 
         if(!wantHold){
             thrust = setpoint.manualThrust;
@@ -103,17 +106,25 @@ void AltitudeControllerTask(void *argument){
             altitudeController.vzSetpoint = vzSetpoint;
 
             thrust = HOVER_THRUST + PID_Update(&vzPID, vzSetpoint, altitude.verticalSpeed, ALT_CTRL_DT);
+            vzError = vzSetpoint - altitude.verticalSpeed;
 
             /* Increase thrust to compensate for the drone tilting */
             float tiltComp = cosf(attitude.roll) * cosf(attitude.pitch);
             if(tiltComp < TILT_COMP_MIN) tiltComp = TILT_COMP_MIN;
             thrust /= tiltComp;
         }
-        if(arm_state == ARMED && thrust > THRUST_MAX){
+        if(thrust > THRUST_MAX){
             thrust = THRUST_MAX;
+            thrustSaturatedHigh = 1;
         }
-        else if(arm_state == ARMED && thrust < THRUST_MIN){
+        else if(thrust > 0.0f && thrust < THRUST_MIN){
             thrust = THRUST_MIN;
+            thrustSaturatedLow = 1;
+        }
+        else if(thrust < 0.0f) thrust = 0.0f;
+
+        if (wantHold){
+            PID_NotifySaturation(&vzPID, vzError, thrustSaturatedHigh, thrustSaturatedLow);
         }
 
         Thrust_Data_t *out = &altitudeController.data;

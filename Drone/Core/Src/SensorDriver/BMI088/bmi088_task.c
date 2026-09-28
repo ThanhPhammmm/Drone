@@ -14,6 +14,10 @@ SemaphoreHandle_t imuDmaSem;
 //static uint32_t logIdx = 0;
 #endif
 
+static uint32_t IMU_TimestampUs(void){
+    return DWT->CYCCNT / (SystemCoreClock / 1000000U);
+}
+
 static BaseType_t  IMU_Signal_Init(void) {
     imuDmaSem = xSemaphoreCreateBinary();
     return (imuDmaSem != NULL) ? pdPASS : pdFAIL;
@@ -77,7 +81,7 @@ void IMUTask(void *argument){
             else{
             	bmi088.data.dt = (float)imuDt / (float)SystemCoreClock;
             }
-            bmi088.data.timestamp_us = DWT->CYCCNT / (SystemCoreClock / 1000000U);
+            bmi088.data.timestamp_us = IMU_TimestampUs();
             bmi088.data.timestamp = xTaskGetTickCount();
         }
         if(bmi088.accelReady){

@@ -25,5 +25,6 @@ void Motor_Print(uint8_t i, const uint32_t ccr);
 void Motor_Setpoint_Print(RateSetpoint_Data_t* setpoint, const float thrust);
 void RC_Print_Attitude_Setpoint(RC_Data_t* rc, float throttle);
 void Motor_Torque_Print(RateController_Handle_t* torque, const float thrust);
+void Motor_Axis_Print(const int number, const float axis);
 
 #endif /* INC_DEBUG_DEBUG_H_ */

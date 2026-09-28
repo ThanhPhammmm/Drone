@@ -1,3 +1,4 @@
+#include <actuator.h>
 #include "app.h"
 #include "imu_topic.h"
 #include "attitude_topic.h"
@@ -6,7 +7,6 @@
 #include "mag_topic.h"
 #include "baro_topic.h"
 #include "arm.h"
-#include "motor_output.h"
 #include "altitude_topic.h"
 #include "thrust_topic.h"
 #include "rc_topic.h"

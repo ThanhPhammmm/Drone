@@ -5,7 +5,7 @@
 #define RC_TICK_MS                  20
 #define RC_TIMEOUT_MS               3000     /* no valid frame -> link lost */
 
-#define RC_ARM_THROTTLE_MAX         0.05f   /* must be at idle to arm */
+#define RC_ARM_THROTTLE_MAX         0.02f   /* must be at idle to arm */
 #define RC_FAILSAFE_DESCENT_MS      (-1.0f) /* m/s */
 #define RC_FAILSAFE_THRUST_SCALE    0.90f   /* blind descent if no baro */
 
@@ -78,11 +78,21 @@ void RCTask(void *argument){
 
         /* One authority for whether motors may spin. This task only reports
          * inputs; every transition rule lives in arm.c. */
-        uint8_t armRequest   = (latest.flags & RC_FLAG_ARM);
         uint8_t throttleIdle = (rc.throttle < RC_ARM_THROTTLE_MAX);
 
+        Thrust_Data_t   thrustNow = {0};
+        Altitude_Data_t altNow    = {0};
+        uint8_t haveAlt = (AltitudeTopic_Copy(&altNow, 0) == pdPASS);
+        uint8_t altValid = altNow.valid && altNow.baroValid;
+        uint8_t armRequest   = (latest.flags & RC_FLAG_ARM) && MagBaro_IsCalibrated() && BMI088_IsCalibrated();
+
+        if(ThrustTopic_Copy(&thrustNow, 0) != pdPASS) thrustNow.thrust = 0.0f;
+
         Arm_Update(armRequest, throttleIdle, linkOk,
-                   (uint32_t)(age * portTICK_PERIOD_MS));
+                           (uint32_t)(age * portTICK_PERIOD_MS),
+                           thrustNow.thrust,
+                           altNow.altitude, altNow.verticalSpeed,
+                           haveAlt && altValid);
 
         AttitudeSetpoint_Data_t attSp = {0};
         AltitudeSetpoint_Data_t altSp = {0};
@@ -132,7 +142,7 @@ void RCTask(void *argument){
         attSp.timestamp_us = rc.timestamp_us;
         altSp.timestamp_us = rc.timestamp_us;
 
-        //RC_Print_Attitude_Setpoint(&rc, lastThrottle);
+        RC_Print_Attitude_Setpoint(&rc, lastThrottle);
 
         RCTopic_Publish(&rc);
         AttitudeSetpointTopic_Publish(&attSp);

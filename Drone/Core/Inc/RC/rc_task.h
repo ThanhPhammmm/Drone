@@ -12,6 +12,8 @@
 #include <string.h>
 #include <stm32f4xx.h>
 #include "debug.h"
+#include "altitude_topic.h"
+#include "magbaro_task.h"
 
 void RCTask(void *argument);
 

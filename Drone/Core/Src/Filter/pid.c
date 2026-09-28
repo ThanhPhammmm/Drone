@@ -8,9 +8,7 @@ static inline float pid_clamp(float v, float lo, float hi){
 }
 
 void PID_Init(PID_t *pid, float kp, float ki, float kd, float integralLimit, float outputLimit, float dCutoffHz){
-    pid->kp = kp;
-    pid->ki = ki;
-    pid->kd = kd;
+	PID_SetGains(pid, kp, ki, kd);
 
     pid->integralLimit = integralLimit;
     pid->outputLimit   = outputLimit;
@@ -26,11 +24,12 @@ void PID_SetGains(PID_t *pid, float kp, float ki, float kd){
 }
 
 void PID_Reset(PID_t *pid){
-    pid->integral        = 0.0f;
-    pid->prevMeasurement = 0.0f;
-    pid->dFiltered       = 0.0f;
-    pid->output          = 0.0f;
-    pid->seeded          = 0;
+    pid->integral			= 0.0f;
+    pid->prevIntegral		= 0.0f;
+    pid->prevMeasurement	= 0.0f;
+    pid->dFiltered			= 0.0f;
+    pid->output				= 0.0f;
+    pid->seeded				= 0;
 }
 
 float PID_Update(PID_t *pid, float setpoint, float measurement, float dt){
@@ -41,6 +40,7 @@ float PID_Update(PID_t *pid, float setpoint, float measurement, float dt){
     if(dt > 0.0f && pid->seeded){
         derivative = -(measurement - pid->prevMeasurement) / dt;
     }
+
     pid->prevMeasurement = measurement;
     pid->seeded          = 1;
 
@@ -53,7 +53,9 @@ float PID_Update(PID_t *pid, float setpoint, float measurement, float dt){
         pid->dFiltered = derivative;
     }
 
+	pid->prevIntegral = pid->integral;
     float integral = pid->integral;
+
     if(dt > 0.0f && pid->ki != 0.0f){
         integral += error * dt;
         integral  = pid_clamp(integral, -pid->integralLimit, pid->integralLimit);
@@ -75,4 +77,10 @@ float PID_Update(PID_t *pid, float setpoint, float measurement, float dt){
     pid->output   = out;
 
     return out;
+}
+
+void PID_NotifySaturation(PID_t *pid, float direction, uint8_t saturatedHigh, uint8_t saturatedLow){
+    if((saturatedHigh && direction > 0.0f) || (saturatedLow && direction < 0.0f)){
+        pid->integral = pid->prevIntegral;
+    }
 }

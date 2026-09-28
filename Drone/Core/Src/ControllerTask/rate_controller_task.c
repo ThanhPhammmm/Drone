@@ -13,10 +13,11 @@
 #define RATE_PID_KI_YAW   		0.15271f
 #define RATE_PID_KD_YAW   		0.00252f
 
-#define RATE_PID_INTEGRAL_LIMIT	3.0f
-#define RATE_PID_OUTPUT_LIMIT	0.4f
-#define RATE_PID_D_CUTOFF_HZ	40.0f
-#define RATE_SETPOINT_MAX_AGE_US	16000U
+#define RATE_PID_INTEGRAL_LIMIT			3.0f
+#define RATE_PID_OUTPUT_LIMIT			0.4f
+#define RATE_PID_D_CUTOFF_HZ			40.0f
+#define RATE_SETPOINT_MAX_AGE_US		16000U
+#define THROTTLE_TAKEOFF_THRESHOLD 		0.2
 
 RateController_Handle_t rateController;
 volatile float g_throttle = 0.0f;
@@ -40,7 +41,13 @@ static void RateController_Idle(void){
 	rateController.pitchTorqueOutput = 0.0f;
 	rateController.yawTorqueOutput   = 0.0f;
 
-	MotorOutput_Update(0.0f, 0.0f, 0.0f, 0.0f);
+	MotorOutput_Update(0.0f, 0.0f, 0.0f, 0.0f, NULL);
+}
+
+void RateController_BleedingIntegrator() {
+	rollRatePID.integral  *= 0.9f;
+	pitchRatePID.integral  *= 0.9f;
+	yawRatePID.integral  *= 0.9f;
 }
 
 void RateControllerTask(void *argument){
@@ -62,11 +69,14 @@ void RateControllerTask(void *argument){
 		if(AttitudeTopic_Copy(&attitude) != pdPASS) continue;
 		if(RateSetpointTopic_Copy(&setpoint) != pdPASS) continue;   /* latest (250 Hz) */
 
-	    if(arm_state != ARMED){
-	      RateController_Idle();
-	      lastThrust = 0;
-	      continue;
-	    }
+        if(ThrustTopic_Copy(&thrust, 0) == pdPASS){
+            lastThrust = thrust.thrust;
+        }
+
+        if(!Arm_MotorsAllowed() && Arm_IntegratorHold()){
+        	RateController_Idle();
+        	continue;
+        }
 
 		uint32_t age_us = attitude.timestamp_us - setpoint.timestamp_us;
 		if(age_us > RATE_SETPOINT_MAX_AGE_US){
@@ -74,16 +84,35 @@ void RateControllerTask(void *argument){
 			setpoint.pitchRate = 0.0f;
 			setpoint.yawRate   = 0.0f;
 		}
+
+        // Angle mode
+        if(lastThrust < 0.6){
+        	RateController_BleedingIntegrator();
+        }
+
+		// Gate for change state from Ground Arm to Airborne
+		if(Arm_GetState() != AIRBORNE){
+			setpoint.yawRate = attitude.yawRate;
+		}
+
 		rateController.rollTorqueOutput  = PID_Update(&rollRatePID,  setpoint.rollRate,  attitude.rollRate,  attitude.dt);
 		rateController.pitchTorqueOutput = PID_Update(&pitchRatePID, setpoint.pitchRate, attitude.pitchRate, attitude.dt);
 		rateController.yawTorqueOutput   = PID_Update(&yawRatePID,   setpoint.yawRate,   attitude.yawRate,   attitude.dt);
 
-        if(ThrustTopic_Copy(&thrust, 0) == pdPASS){
-            lastThrust = thrust.thrust;
-        }
-		//Motor_Setpoint_Print(&setpoint, lastThrust);
+
+		Motor_Setpoint_Print(&setpoint, lastThrust);
 		Motor_Torque_Print(&rateController, lastThrust);
 		//MotorOutput_Update(rateController.rollTorqueOutput, rateController.pitchTorqueOutput, rateController.yawTorqueOutput, g_throttle);
-        MotorOutput_Update(rateController.rollTorqueOutput, rateController.pitchTorqueOutput, rateController.yawTorqueOutput, lastThrust);
+		MotorSaturation_t sat = {0};
+        MotorOutput_Update(rateController.rollTorqueOutput, rateController.pitchTorqueOutput, rateController.yawTorqueOutput, lastThrust, &sat);
+
+        if(sat.attitudeSaturated){
+        	PID_NotifySaturation(&rollRatePID, rateController.rollTorqueOutput,
+        			sat.throttleSaturatedHigh, sat.throttleSaturatedLow);
+        	PID_NotifySaturation(&pitchRatePID, rateController.pitchTorqueOutput,
+        			sat.throttleSaturatedHigh, sat.throttleSaturatedLow);
+        	PID_NotifySaturation(&yawRatePID, rateController.yawTorqueOutput,
+        			sat.throttleSaturatedHigh, sat.throttleSaturatedLow);
+        }
 	}
 }

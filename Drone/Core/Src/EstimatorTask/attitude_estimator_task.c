@@ -77,6 +77,6 @@ void AttitudeEstimatorTask(void *argument){
 		attitude->timestamp_us = imu.timestamp_us;
 
 		AttitudeTopic_Publish(attitude);
-		//BMI088_PrintAttitude(attitude);
+		BMI088_PrintAttitude(attitude);
     }
 }

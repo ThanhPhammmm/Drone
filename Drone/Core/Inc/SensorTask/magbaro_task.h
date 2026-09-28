@@ -10,5 +10,6 @@
 #include <stm32f4xx.h>
 
 void MagBaroTask(void *argument);
+uint8_t MagBaro_IsCalibrated(void);
 
 #endif /* INC_SENSORTASK_MAGBARO_TASK_H_ */

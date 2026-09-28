@@ -1,4 +1,4 @@
-#include "motor_output.h"
+#include "actuator.h"
 #include "tim.h"
 #include "arm.h"
 #include "debug.h"
@@ -6,7 +6,7 @@
 #define MOTOR_TIM      htim4
 #define MOTOR_PWM_MIN  1000.0f   /* µs = throttle 0 / disarmed */
 #define MOTOR_PWM_MAX  2000.0f   /* µs = throttle 1 */
-#define MOTOR_IDLE     0.1f     /* spin-min when ARMED (0..1); set 0.0f for very first test */
+#define MOTOR_IDLE     0.05f     /* spin-min while motors are allowed to move (0..1) */
 #define MOTOR_MAX      1.0f
 
 #define MOTOR_DESAT_MIN_THROTTLE  0.05f
@@ -39,7 +39,13 @@ void MotorOutput_Init(void){
     }
 }
 
-void MotorOutput_Update(float roll, float pitch, float yaw, float throttle){
+void MotorOutput_Update(float roll, float pitch, float yaw, float throttle, MotorSaturation_t *sat){
+	if(sat){
+		sat->attitudeSaturated		= 0;
+		sat->throttleSaturatedHigh	= 0;
+		sat->throttleSaturatedLow	= 0;
+	}
+
 	if(!Arm_MotorsAllowed()){
         for(uint8_t i = 0; i < MOTOR_COUNT; i++) motor_write(i, 0.0f);
         return;
@@ -53,6 +59,8 @@ void MotorOutput_Update(float roll, float pitch, float yaw, float throttle){
                 + pitch * mix[i][1]
                 + yaw   * mix[i][2];
 
+        //Motor_Axis_Print(i, axis[i]);
+
         if(i == 0 || axis[i] < lo) lo = axis[i];
         if(i == 0 || axis[i] > hi) hi = axis[i];
     }
@@ -65,11 +73,18 @@ void MotorOutput_Update(float roll, float pitch, float yaw, float throttle){
         scale = available / range;
         lo *= scale;
         hi *= scale;
+        if(sat) sat->attitudeSaturated = 1;
     }
 
-    float thrMin = (throttle > MOTOR_DESAT_MIN_THROTTLE) ? (MOTOR_IDLE - lo)
-                                                         : MOTOR_IDLE;
-    float thr = clampf(throttle, thrMin, MOTOR_MAX - hi);
+    float thrMin = (throttle > MOTOR_DESAT_MIN_THROTTLE) ? (MOTOR_IDLE - lo) : MOTOR_IDLE;
+    float thrMax = MOTOR_MAX - hi;
+
+    float thr = clampf(throttle, thrMin, thrMax);
+
+    if(sat){
+    	if(throttle > thrMax) sat->throttleSaturatedHigh = 1;
+    	if(throttle < thrMin) sat->throttleSaturatedLow  = 1;
+	}
 
     for(uint8_t i = 0; i < MOTOR_COUNT; i++){
         motor_write(i, clampf(thr + axis[i] * scale, MOTOR_IDLE, MOTOR_MAX));
