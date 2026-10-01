@@ -41,23 +41,53 @@ void MotorOutput_Init(void){
 
 void MotorOutput_Update(float roll, float pitch, float yaw, float throttle, MotorSaturation_t *sat){
 	if(sat){
-		sat->attitudeSaturated		= 0;
+		sat->rollPitchSaturated		= 0;
+		sat->yawSaturated			= 0;
 		sat->throttleSaturatedHigh	= 0;
 		sat->throttleSaturatedLow	= 0;
 	}
 
 	if(!Arm_MotorsAllowed()){
-        for(uint8_t i = 0; i < MOTOR_COUNT; i++) motor_write(i, 0.0f);
+		/* ARMED_GROUND spins the props at idle, everything else keeps them stopped */
+		float idle = Arm_GroundIdle() ? MOTOR_IDLE : 0.0f;
+        for(uint8_t i = 0; i < MOTOR_COUNT; i++) motor_write(i, idle);
         return;
     }
 
-    float axis[MOTOR_COUNT];
+    const float available = MOTOR_MAX - MOTOR_IDLE;
+
+    /* Roll/pitch first: they keep the aircraft upright. */
+    float rp[MOTOR_COUNT];
     float lo = 0.0f, hi = 0.0f;
 
     for(uint8_t i = 0; i < MOTOR_COUNT; i++){
-        axis[i] = roll  * mix[i][0]
-                + pitch * mix[i][1]
-                + yaw   * mix[i][2];
+        rp[i] = roll  * mix[i][0]
+              + pitch * mix[i][1];
+
+        if(i == 0 || rp[i] < lo) lo = rp[i];
+        if(i == 0 || rp[i] > hi) hi = rp[i];
+    }
+
+    float scale = 1.0f;
+    if((hi - lo) > available){
+        scale = available / (hi - lo);
+        lo *= scale;
+        hi *= scale;
+        if(sat) sat->rollPitchSaturated = 1;
+    }
+
+    /* Yaw only gets the room roll/pitch left, so a large yaw demand can never
+     * scale roll/pitch down. The yaw mix is +-1, so |yaw| <= headroom/2 cannot
+     * push the spread past `available`. */
+    float yawMax = 0.5f * (available - (hi - lo));
+    if(yaw > yawMax || yaw < -yawMax){
+        yaw = clampf(yaw, -yawMax, yawMax);
+        if(sat) sat->yawSaturated = 1;
+    }
+
+    float axis[MOTOR_COUNT];
+    for(uint8_t i = 0; i < MOTOR_COUNT; i++){
+        axis[i] = rp[i] * scale + yaw * mix[i][2];
 
         //Motor_Axis_Print(i, axis[i]);
 
@@ -65,18 +95,10 @@ void MotorOutput_Update(float roll, float pitch, float yaw, float throttle, Moto
         if(i == 0 || axis[i] > hi) hi = axis[i];
     }
 
-    const float available = MOTOR_MAX - MOTOR_IDLE;
-    float range = hi - lo;
-    float scale = 1.0f;
-
-    if(range > available && range > 0.0f){
-        scale = available / range;
-        lo *= scale;
-        hi *= scale;
-        if(sat) sat->attitudeSaturated = 1;
-    }
-
-    float thrMin = (throttle > MOTOR_DESAT_MIN_THROTTLE) ? (MOTOR_IDLE - lo) : MOTOR_IDLE;
+    /* Air-mode: lift the collective so a torque demand can still be met at low
+     * throttle. Only once airborne -- on the ground it lets the attitude loop
+     * raise one side of the frame and flip it over its own legs. */
+    float thrMin = (Arm_IsAirborne() && throttle > MOTOR_DESAT_MIN_THROTTLE) ? (MOTOR_IDLE - lo) : MOTOR_IDLE;
     float thrMax = MOTOR_MAX - hi;
 
     float thr = clampf(throttle, thrMin, thrMax);
@@ -87,10 +109,11 @@ void MotorOutput_Update(float roll, float pitch, float yaw, float throttle, Moto
 	}
 
     for(uint8_t i = 0; i < MOTOR_COUNT; i++){
-        motor_write(i, clampf(thr + axis[i] * scale, MOTOR_IDLE, MOTOR_MAX));
+        float out = clampf(thr + axis[i], MOTOR_IDLE, MOTOR_MAX);
+        motor_write(i, out);
 
         //Debug only
-        uint32_t ccr = MOTOR_PWM_MIN + clampf(thr + axis[i] * scale, MOTOR_IDLE, MOTOR_MAX) * (MOTOR_PWM_MAX - MOTOR_PWM_MIN) + 0.5f;
+        uint32_t ccr = (uint32_t)(MOTOR_PWM_MIN + out * (MOTOR_PWM_MAX - MOTOR_PWM_MIN) + 0.5f);
         Motor_Print(i, ccr);
     }
 }

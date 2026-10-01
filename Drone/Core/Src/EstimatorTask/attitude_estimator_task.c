@@ -3,6 +3,12 @@
 
 #define MAG_MAX_AGE_US   20000U
 
+/* ANGLE and ALT_HOLD never use the yaw angle (yaw is flown as a rate), so the
+ * magnetometer can only hurt them: motor current bends its field right when
+ * the throttle comes up. Enable for POS_HOLD, after a proper mag calibration. */
+
+#define ATT_EST_USE_MAG  0
+
 static Mahony_t mahony;
 AttitudeEstimator_Handle_t attitudeEstimator;
 
@@ -28,7 +34,7 @@ void AttitudeEstimatorTask(void *argument){
 
 		Mag_Data_t mag = {0};
 		uint8_t magValid = 0;
-		if(MagTopic_Copy(&mag, 0) == pdPASS && mag.timestamp_us != 0){
+		if(ATT_EST_USE_MAG && MagTopic_Copy(&mag, 0) == pdPASS && mag.timestamp_us != 0){
 		    uint32_t age_us = imu.timestamp_us - mag.timestamp_us;
 		    if(age_us < MAG_MAX_AGE_US){
 		        magValid = 1;
@@ -78,5 +84,6 @@ void AttitudeEstimatorTask(void *argument){
 
 		AttitudeTopic_Publish(attitude);
 		BMI088_PrintAttitude(attitude);
+		BMI088_PrintAttitudeRate(attitude);
     }
 }

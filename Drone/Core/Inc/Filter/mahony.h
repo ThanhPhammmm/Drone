@@ -16,6 +16,8 @@ typedef struct{
     /* bias-corrected body rates (rad/s) */
     float rate[3];
 
+    uint8_t headingAligned;     /* yaw snapped to the magnetometer once */
+
 } Mahony_t;
 
 void Mahony_Init(Mahony_t *mahony, float kp, float ki);

@@ -84,3 +84,12 @@ void PID_NotifySaturation(PID_t *pid, float direction, uint8_t saturatedHigh, ui
         pid->integral = pid->prevIntegral;
     }
 }
+
+void PID_ResetIntegral(PID_t *pid){
+    pid->integral     = 0.0f;
+    pid->prevIntegral = 0.0f;
+}
+
+void PID_HoldIntegrator(PID_t *pid){
+    pid->integral = pid->prevIntegral;
+}

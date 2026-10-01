@@ -11,17 +11,15 @@
 
 #define RATE_PID_KP_YAW			1.73369f
 #define RATE_PID_KI_YAW   		0.15271f
-#define RATE_PID_KD_YAW   		0.00252f
+#define RATE_PID_KD_YAW   		0.0f
 
 #define RATE_PID_INTEGRAL_LIMIT			3.0f
 #define RATE_PID_OUTPUT_LIMIT			0.4f
 #define RATE_PID_D_CUTOFF_HZ			40.0f
 #define RATE_SETPOINT_MAX_AGE_US		16000U
-#define THROTTLE_TAKEOFF_THRESHOLD 		0.2
 
 RateController_Handle_t rateController;
-volatile float g_throttle = 0.0f;
-Thrust_Data_t thrust;
+static Thrust_Data_t thrust;
 static float lastThrust = 0.0f;
 
 static PID_t rollRatePID;
@@ -44,10 +42,10 @@ static void RateController_Idle(void){
 	MotorOutput_Update(0.0f, 0.0f, 0.0f, 0.0f, NULL);
 }
 
-void RateController_BleedingIntegrator() {
-	rollRatePID.integral  *= 0.9f;
-	pitchRatePID.integral  *= 0.9f;
-	yawRatePID.integral  *= 0.9f;
+static void RateController_ResetIntegrators(void){
+	PID_ResetIntegral(&rollRatePID);
+	PID_ResetIntegral(&pitchRatePID);
+	PID_ResetIntegral(&yawRatePID);
 }
 
 void RateControllerTask(void *argument){
@@ -67,13 +65,13 @@ void RateControllerTask(void *argument){
 	while(1){
 		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);          /* 2 kHz, from estimator */
 		if(AttitudeTopic_Copy(&attitude) != pdPASS) continue;
-		if(RateSetpointTopic_Copy(&setpoint) != pdPASS) continue;   /* latest (250 Hz) */
+		if(RateSetpointTopic_Copy(&setpoint) != pdPASS) continue;   /* latest (500 Hz) */
 
         if(ThrustTopic_Copy(&thrust, 0) == pdPASS){
             lastThrust = thrust.thrust;
         }
 
-        if(!Arm_MotorsAllowed() && Arm_IntegratorHold()){
+        if(!Arm_MotorsAllowed()){
         	RateController_Idle();
         	continue;
         }
@@ -85,14 +83,11 @@ void RateControllerTask(void *argument){
 			setpoint.yawRate   = 0.0f;
 		}
 
-        // Angle mode
-        if(lastThrust < 0.6){
-        	RateController_BleedingIntegrator();
-        }
-
-		// Gate for change state from Ground Arm to Airborne
-		if(Arm_GetState() != AIRBORNE){
-			setpoint.yawRate = attitude.yawRate;
+		/* Integrators only run once off the ground. While the frame is pinned by
+		 * the ground the rate error can never be removed, the I-term winds up and
+		 * is released as a kick at lift-off. */
+		if(!Arm_IsAirborne()){
+			RateController_ResetIntegrators();
 		}
 
 		rateController.rollTorqueOutput  = PID_Update(&rollRatePID,  setpoint.rollRate,  attitude.rollRate,  attitude.dt);
@@ -102,17 +97,17 @@ void RateControllerTask(void *argument){
 
 		Motor_Setpoint_Print(&setpoint, lastThrust);
 		Motor_Torque_Print(&rateController, lastThrust);
-		//MotorOutput_Update(rateController.rollTorqueOutput, rateController.pitchTorqueOutput, rateController.yawTorqueOutput, g_throttle);
 		MotorSaturation_t sat = {0};
         MotorOutput_Update(rateController.rollTorqueOutput, rateController.pitchTorqueOutput, rateController.yawTorqueOutput, lastThrust, &sat);
 
-        if(sat.attitudeSaturated){
-        	PID_NotifySaturation(&rollRatePID, rateController.rollTorqueOutput,
-        			sat.throttleSaturatedHigh, sat.throttleSaturatedLow);
-        	PID_NotifySaturation(&pitchRatePID, rateController.pitchTorqueOutput,
-        			sat.throttleSaturatedHigh, sat.throttleSaturatedLow);
-        	PID_NotifySaturation(&yawRatePID, rateController.yawTorqueOutput,
-        			sat.throttleSaturatedHigh, sat.throttleSaturatedLow);
+        /* Anti-windup: the mixer could not deliver the torque on that axis, so
+         * do not let the integrator keep growing. */
+        if(sat.rollPitchSaturated){
+        	PID_HoldIntegrator(&rollRatePID);
+        	PID_HoldIntegrator(&pitchRatePID);
+        }
+        if(sat.yawSaturated){
+        	PID_HoldIntegrator(&yawRatePID);
         }
 	}
 }

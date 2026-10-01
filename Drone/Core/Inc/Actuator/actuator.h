@@ -6,7 +6,8 @@
 #define MOTOR_COUNT   4
 
 typedef struct{
-    uint8_t attitudeSaturated;     /* 1: Roll/Pitch/Yaw is scale down because of motor output limit */
+    uint8_t rollPitchSaturated;    /* 1: Roll/Pitch is scaled down because of motor output limit */
+    uint8_t yawSaturated;          /* 1: Yaw is cut to leave Roll/Pitch their authority */
     uint8_t throttleSaturatedHigh; /* 1: Throttle is over max (MOTOR_MAX) */
     uint8_t throttleSaturatedLow;  /* 1: Throttle is below min (MOTOR_IDLE) */
 } MotorSaturation_t;

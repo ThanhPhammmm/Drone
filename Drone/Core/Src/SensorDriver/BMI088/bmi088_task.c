@@ -6,6 +6,7 @@ extern UART_HandleTypeDef huart1;
 
 SemaphoreHandle_t imuDmaSem;
 #define GYRO_LPF_CUTOFF_HZ				90.0f   /* 80-100Hz */
+#define GYRO_SAMPLE_RATE_HZ				2000.0f /* BMI088_GYRO_ODR_2000_* in bmi088.c */
 #define ACCEL_LPF_CUTOFF_HZ				30.0f	/* 20-50Hz	*/
 
 #ifdef DEBUG
@@ -43,16 +44,16 @@ void IMUTask(void *argument){
     static uint32_t lastCycle = 0;
     static uint32_t imuDt = 0;
     static uint8_t  dtValid = 0;
-    static LPF_t gyroLPF[3];
+    static Biquad_t gyroLPF[3];
     static LPF_t accelLPF[3];
 	static uint8_t lpfInit = 0;
     while(1){
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
         if(!lpfInit){
-            LPF_Init(&gyroLPF[0], GYRO_LPF_CUTOFF_HZ);
-            LPF_Init(&gyroLPF[1], GYRO_LPF_CUTOFF_HZ);
-            LPF_Init(&gyroLPF[2], GYRO_LPF_CUTOFF_HZ);
+            Biquad_InitLowpass(&gyroLPF[0], GYRO_LPF_CUTOFF_HZ, GYRO_SAMPLE_RATE_HZ);
+            Biquad_InitLowpass(&gyroLPF[1], GYRO_LPF_CUTOFF_HZ, GYRO_SAMPLE_RATE_HZ);
+            Biquad_InitLowpass(&gyroLPF[2], GYRO_LPF_CUTOFF_HZ, GYRO_SAMPLE_RATE_HZ);
 
             LPF_Init(&accelLPF[0], ACCEL_LPF_CUTOFF_HZ);
             LPF_Init(&accelLPF[1], ACCEL_LPF_CUTOFF_HZ);
@@ -101,9 +102,9 @@ void IMUTask(void *argument){
         }
 
         if(bmi088.data.gyro_updated){
-            bmi088.data.gyro.x = LPF_Update(&gyroLPF[0], bmi088.data.gyro.x, bmi088.data.dt);
-            bmi088.data.gyro.y = LPF_Update(&gyroLPF[1], bmi088.data.gyro.y, bmi088.data.dt);
-            bmi088.data.gyro.z = LPF_Update(&gyroLPF[2], bmi088.data.gyro.z, bmi088.data.dt);
+            bmi088.data.gyro.x = Biquad_Update(&gyroLPF[0], bmi088.data.gyro.x);
+            bmi088.data.gyro.y = Biquad_Update(&gyroLPF[1], bmi088.data.gyro.y);
+            bmi088.data.gyro.z = Biquad_Update(&gyroLPF[2], bmi088.data.gyro.z);
         }
         if(bmi088.data.accel_updated){
             bmi088.data.accel.x = LPF_Update(&accelLPF[0], bmi088.data.accel.x, bmi088.data.dt);

@@ -26,5 +26,6 @@ void Motor_Setpoint_Print(RateSetpoint_Data_t* setpoint, const float thrust);
 void RC_Print_Attitude_Setpoint(RC_Data_t* rc, float throttle);
 void Motor_Torque_Print(RateController_Handle_t* torque, const float thrust);
 void Motor_Axis_Print(const int number, const float axis);
+void BMI088_PrintAttitudeRate(const Attitude_Data_t* attitude);
 
 #endif /* INC_DEBUG_DEBUG_H_ */

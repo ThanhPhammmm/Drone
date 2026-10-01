@@ -11,8 +11,6 @@
 
 #define RC_MAX_TILT_RAD             0.35f   /* ~20 deg at full stick */
 #define RC_MAX_YAW_RATE             3.0f    /* rad/s */
-#define RC_MAX_CLIMB_RATE           2.0f    /* m/s at full throttle deflection */
-#define RC_THROTTLE_DEADBAND        0.1f
 
 static RC_Data_t rc;
 
@@ -63,12 +61,6 @@ void RCTask(void *argument){
             rc.throttle = (float)latest.throttle / (float)RC_THROTTLE_MAX;
             if(rc.throttle > 1.0f) rc.throttle = 1.0f;
             lastThrottle = rc.throttle;
-
-            /* RATE mode needs the attitude controller to pass sticks straight
-             * through as rates, which it cannot do yet -- fall back to ANGLE
-             * rather than silently flying something the pilot did not pick. */
-            rc.mode = (latest.mode == RC_MODE_ALT_HOLD) ? RC_MODE_ALT_HOLD
-                                                        : RC_MODE_ANGLE;
         }
         else{
             rc.roll = rc.pitch = rc.yaw = 0.0f;
@@ -76,63 +68,78 @@ void RCTask(void *argument){
              * descent below needs it. */
         }
 
-        /* One authority for whether motors may spin. This task only reports
-         * inputs; every transition rule lives in arm.c. */
-        uint8_t throttleIdle = (rc.throttle < RC_ARM_THROTTLE_MAX);
+        Altitude_Data_t altNow = {0};
+        uint8_t altValid = (AltitudeTopic_Copy(&altNow, 0) == pdPASS) && altNow.valid;
 
-        Thrust_Data_t   thrustNow = {0};
-        Altitude_Data_t altNow    = {0};
-        uint8_t haveAlt = (AltitudeTopic_Copy(&altNow, 0) == pdPASS);
-        uint8_t altValid = altNow.valid && altNow.baroValid;
-        uint8_t armRequest   = (latest.flags & RC_FLAG_ARM) && MagBaro_IsCalibrated() && BMI088_IsCalibrated();
+        /* Flight mode actually flown. On link loss: ALT_HOLD descent if the
+         * altitude estimate is good, otherwise ANGLE with a blind thrust cut. */
+        FlightMode_t mode;
+        if(linkOk) mode = FlightMode_Resolve(latest.mode, altValid);
+        else       mode = altValid ? FLIGHT_MODE_ALT_HOLD : FLIGHT_MODE_ANGLE;
+        rc.mode = (uint8_t)mode;
 
+        Thrust_Data_t thrustNow = {0};
         if(ThrustTopic_Copy(&thrustNow, 0) != pdPASS) thrustNow.thrust = 0.0f;
 
-        Arm_Update(armRequest, throttleIdle, linkOk,
-                           (uint32_t)(age * portTICK_PERIOD_MS),
-                           thrustNow.thrust,
-                           altNow.altitude, altNow.verticalSpeed,
-                           haveAlt && altValid);
+        Arm_Input_t armIn;
+        armIn.armSwitch      = (latest.flags & RC_FLAG_ARM) ? 1U : 0U;
+        armIn.sensorsReady   = MagBaro_IsCalibrated() && BMI088_IsCalibrated();
+        armIn.linkOk         = linkOk;
+        armIn.linkLostMs     = (uint32_t)(age * portTICK_PERIOD_MS);
+        armIn.throttleLow    = (rc.throttle < RC_ARM_THROTTLE_MAX);
+        /* take-off/landing come from the pilot's stick, not from the thrust the
+         * controller happens to output (in ALT_HOLD those are unrelated) */
+        armIn.takeoffRequest = linkOk && FlightMode_TakeoffRequested(mode, rc.throttle);
+        armIn.descendRequest = linkOk && FlightMode_DescendRequested(mode, rc.throttle);
+        armIn.thrust         = thrustNow.thrust;
+        armIn.altitude       = altNow.altitude;
+        armIn.verticalSpeed  = altNow.verticalSpeed;
+        armIn.altitudeValid  = altValid;
+
+        Arm_Update(&armIn);
 
         AttitudeSetpoint_Data_t attSp = {0};
         AltitudeSetpoint_Data_t altSp = {0};
+        altSp.mode = (uint8_t)mode;
 
         if(linkOk){
             attSp.roll    = rc.roll  * RC_MAX_TILT_RAD;
             attSp.pitch   = rc.pitch * RC_MAX_TILT_RAD;
             attSp.yawRate = rc.yaw   * RC_MAX_YAW_RATE;
 
-            if(rc.mode == RC_MODE_ALT_HOLD){
+            switch(mode){
+            case FLIGHT_MODE_POS_HOLD:
+                /* TODO: position controller publishes roll/pitch here instead of the
+                 * sticks (see flight_mode.c). Vertical axis is ALT_HOLD. */
+                /* fall through */
+            case FLIGHT_MODE_ALT_HOLD:
                 /* stick about centre commands climb rate; centred = hold */
-                float t = (rc.throttle - 0.5f) * 2.0f;
-                if(t > -RC_THROTTLE_DEADBAND && t < RC_THROTTLE_DEADBAND) t = 0.0f;
+                altSp.climbRate    = FlightMode_ClimbRate(rc.throttle);
+                altSp.manualThrust = rc.throttle;     /* used only if the estimate drops out */
+                break;
 
-                altSp.climbRate    = t * RC_MAX_CLIMB_RATE;
-                altSp.holdEnabled  = Arm_MotorsAllowed();
-                altSp.manualThrust = rc.throttle;
-            }
-            else{
+            case FLIGHT_MODE_ANGLE:
+            default:
                 altSp.climbRate    = 0.0f;
-                altSp.holdEnabled  = 0;
                 altSp.manualThrust = rc.throttle;
+                break;
             }
         }
         else{
             /* Failsafe: level the aircraft, stop yawing, and descend. */
             attSp.roll = attSp.pitch = attSp.yawRate = 0.0f;
 
-            /* Altitude hold handles the descent when the estimate is good.
-             * If it is not, the controller falls back to manualThrust, so bias
-             * that below the last known throttle for a blind sink. This is a
-             * hard landing, not a graceful one -- the disarm timeout in arm.c
-             * is the real backstop. */
+            /* ALT_HOLD handles the descent when the estimate is good. If it is
+             * not, mode is ANGLE and manualThrust is flown directly, so bias it
+             * below the last known throttle for a blind sink. This is a hard
+             * landing, not a graceful one -- the disarm timeout in arm.c is the
+             * real backstop. */
             altSp.climbRate    = RC_FAILSAFE_DESCENT_MS;
-            altSp.holdEnabled  = Arm_MotorsAllowed();
             altSp.manualThrust = lastThrottle * RC_FAILSAFE_THRUST_SCALE;
         }
 
-        if(arm_state == DISARMED){
-            altSp.holdEnabled  = 0;
+        if(!Arm_MotorsAllowed()){
+            altSp.climbRate    = 0.0f;
             altSp.manualThrust = 0.0f;
         }
 

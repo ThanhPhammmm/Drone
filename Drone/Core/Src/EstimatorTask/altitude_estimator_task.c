@@ -10,6 +10,7 @@
 #define ALT_EST_DT_MAX              0.01f
 
 #define ALT_EST_DECIMATE            10U
+#define ALT_EST_BARO_LOSS_CYCLES    50U       /* 0.5 s at 100 Hz without a fresh baro -> invalid */
 
 AltitudeEstimator_Handle_t altitudeEstimator;
 
@@ -26,6 +27,7 @@ void AltitudeEstimatorTask(void *argument){
 
     float z = 0.0f, vz = 0.0f, accelBias = 0.0f;
     uint8_t initialized = 0;
+    uint16_t baroLostCycles = 0;
 
     uint32_t decimateCount = 0;
     float    dtAcc         = 0.0f;
@@ -50,6 +52,9 @@ void AltitudeEstimatorTask(void *argument){
                 baroFresh = 1;
             }
         }
+
+        if(baroFresh) baroLostCycles = 0;
+        else if(baroLostCycles < ALT_EST_BARO_LOSS_CYCLES) baroLostCycles++;
 
         if(!initialized){
             if(!baroFresh) continue;
@@ -82,7 +87,7 @@ void AltitudeEstimatorTask(void *argument){
         alt->verticalSpeed = vz;
         alt->accelUp       = attitude.accelUp;
         alt->accelBias     = accelBias;
-        alt->valid         = initialized;
+        alt->valid         = initialized && (baroLostCycles < ALT_EST_BARO_LOSS_CYCLES);
         alt->baroValid     = baroFresh;
         alt->dt            = dt;
         alt->timestamp_us  = attitude.timestamp_us;

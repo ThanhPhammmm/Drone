@@ -5,6 +5,7 @@
 #include "rc_protocol.h"
 #include "rc_topic.h"
 #include "arm.h"
+#include "flight_mode.h"
 #include "attitude_setpoint_topic.h"
 #include "altitude_setpoint_topic.h"
 #include "FreeRTOS.h"
