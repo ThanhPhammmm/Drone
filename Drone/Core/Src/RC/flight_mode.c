@@ -10,6 +10,7 @@
 /*
  * POS_HOLD -- not implemented yet, it falls back to ALT_HOLD.
  */
+static volatile FlightMode_t activeMode = FLIGHT_MODE_ANGLE;
 
 FlightMode_t FlightMode_Resolve(uint8_t requested, uint8_t altitudeValid){
 	switch(requested){
@@ -45,4 +46,12 @@ uint8_t FlightMode_TakeoffRequested(FlightMode_t mode, float throttle){
 uint8_t FlightMode_DescendRequested(FlightMode_t mode, float throttle){
 	if(mode == FLIGHT_MODE_ANGLE) return throttle < FM_ANGLE_DESCEND_THROTTLE;
 	return FlightMode_ClimbRate(throttle) < 0.0f;		/* ALT_HOLD / POS_HOLD: stick below centre */
+}
+
+void FlightMode_SetActive(FlightMode_t mode){
+	activeMode = mode;
+}
+
+FlightMode_t FlightMode_GetActive(void){
+	return activeMode;
 }

@@ -25,5 +25,6 @@ void Mahony_Update(Mahony_t *mahony, const BMI088_Data_t *imu, const float mag[3
 void Mahony_GetQuaternion(const Mahony_t *mahony, float q[4]);
 void Mahony_GetEuler(const Mahony_t *mahony, float *roll, float *pitch, float *yaw);
 void Mahony_GetRate(const Mahony_t *mahony, float rate[3]);
+void Mahony_ResetHeading(Mahony_t *mahony);
 
 #endif /* INC_FILTER_MAHONY_MAHONY_H_ */

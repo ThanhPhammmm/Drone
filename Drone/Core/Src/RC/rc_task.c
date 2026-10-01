@@ -77,6 +77,7 @@ void RCTask(void *argument){
         if(linkOk) mode = FlightMode_Resolve(latest.mode, altValid);
         else       mode = altValid ? FLIGHT_MODE_ALT_HOLD : FLIGHT_MODE_ANGLE;
         rc.mode = (uint8_t)mode;
+        FlightMode_SetActive(mode);
 
         Thrust_Data_t thrustNow = {0};
         if(ThrustTopic_Copy(&thrustNow, 0) != pdPASS) thrustNow.thrust = 0.0f;

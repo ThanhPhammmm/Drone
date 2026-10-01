@@ -12,6 +12,13 @@
 #include <stdio.h>
 #include "bmi088.h"
 #include "timebase.h"
+#include "flight_mode.h"
+#include "mahony.h"
+
+/* ANGLE and ALT_HOLD never use the yaw angle (yaw is flown as a rate), so the
+ * magnetometer can only hurt them: motor current bends its field right when
+ * the throttle comes up. Enable for POS_HOLD, after a proper mag calibration. */
+#define ATT_EST_USE_MAG  (FlightMode_GetActive() == FLIGHT_MODE_POS_HOLD)
 
 typedef struct {
 	Attitude_Data_t data;

@@ -16,7 +16,7 @@
 #define RATE_PID_INTEGRAL_LIMIT			3.0f
 #define RATE_PID_OUTPUT_LIMIT			0.4f
 #define RATE_PID_D_CUTOFF_HZ			40.0f
-#define RATE_SETPOINT_MAX_AGE_US		16000U
+#define RATE_SETPOINT_MAX_AGE_US		16000
 
 RateController_Handle_t rateController;
 static Thrust_Data_t thrust;
@@ -84,7 +84,7 @@ void RateControllerTask(void *argument){
         	continue;
         }
 
-		uint32_t age_us = Time_DiffUs(attitude.timestamp_us, setpoint.timestamp_us);
+        int32_t age_us = Time_DiffUs(attitude.timestamp_us, setpoint.timestamp_us);
 		if(age_us > (int32_t)RATE_SETPOINT_MAX_AGE_US || age_us < -(int32_t)RATE_SETPOINT_MAX_AGE_US){
 			setpoint.rollRate  = 0.0f;
 			setpoint.pitchRate = 0.0f;
