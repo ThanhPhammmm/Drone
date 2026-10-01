@@ -15,10 +15,6 @@ SemaphoreHandle_t imuDmaSem;
 //static uint32_t logIdx = 0;
 #endif
 
-static uint32_t IMU_TimestampUs(void){
-    return DWT->CYCCNT / (SystemCoreClock / 1000000U);
-}
-
 static BaseType_t  IMU_Signal_Init(void) {
     imuDmaSem = xSemaphoreCreateBinary();
     return (imuDmaSem != NULL) ? pdPASS : pdFAIL;
@@ -41,9 +37,11 @@ void IMUTask(void *argument){
 //    }
 //    vTaskDelay(pdMS_TO_TICKS(5000));
 //#endif
-    static uint32_t lastCycle = 0;
-    static uint32_t imuDt = 0;
-    static uint8_t  dtValid = 0;
+    static uint32_t lastGyroCycles  = 0;
+    static uint32_t lastAccelCycles = 0;
+    static uint8_t  gyroDtValid     = 0;
+    static uint8_t  accelDtValid    = 0;
+    static float    accelDt         = 0.0f;
     static Biquad_t gyroLPF[3];
     static LPF_t accelLPF[3];
 	static uint8_t lpfInit = 0;
@@ -67,29 +65,28 @@ void IMUTask(void *argument){
 
         if(bmi088.gyroReady){
         	bmi088.gyroReady = false;
+        	uint32_t sampleCycles = bmi088.gyroIrqCycles;
             if(BMI088_ReadGyro() != BMI088_OK) continue;
             BMI088_ParseGyro();
             bmi088.data.gyro_updated = true;
 
-            uint32_t now = DWT->CYCCNT;
-            imuDt = now - lastCycle;
-            lastCycle = now;
+            bmi088.data.dt = gyroDtValid ? (float)(sampleCycles - lastGyroCycles) / (float)SystemCoreClock : 0.0f;
+            gyroDtValid    = 1;
+            lastGyroCycles = sampleCycles;
 
-            if(!dtValid){ // the first sample after calibration
-            	dtValid = 1;
-            	bmi088.data.dt = 0.0f;
-            }
-            else{
-            	bmi088.data.dt = (float)imuDt / (float)SystemCoreClock;
-            }
-            bmi088.data.timestamp_us = IMU_TimestampUs();
+            bmi088.data.timestamp_us = Time_UsAt(sampleCycles);
             bmi088.data.timestamp = xTaskGetTickCount();
         }
         if(bmi088.accelReady){
         	bmi088.accelReady = false;
+        	uint32_t sampleCycles = bmi088.accelIrqCycles;
             if(BMI088_ReadAccel() != BMI088_OK) continue;
             BMI088_ParseAccel();
             bmi088.data.accel_updated = true;
+
+            accelDt = accelDtValid ? (float)(sampleCycles - lastAccelCycles) / (float)SystemCoreClock : 0.0f;
+            accelDtValid    = 1;
+            lastAccelCycles = sampleCycles;
         }
 
         //BMI088_Convert(); Comment for now
@@ -107,9 +104,9 @@ void IMUTask(void *argument){
             bmi088.data.gyro.z = Biquad_Update(&gyroLPF[2], bmi088.data.gyro.z);
         }
         if(bmi088.data.accel_updated){
-            bmi088.data.accel.x = LPF_Update(&accelLPF[0], bmi088.data.accel.x, bmi088.data.dt);
-            bmi088.data.accel.y = LPF_Update(&accelLPF[1], bmi088.data.accel.y, bmi088.data.dt);
-            bmi088.data.accel.z = LPF_Update(&accelLPF[2], bmi088.data.accel.z, bmi088.data.dt);
+            bmi088.data.accel.x = LPF_Update(&accelLPF[0], bmi088.data.accel.x, accelDt);
+            bmi088.data.accel.y = LPF_Update(&accelLPF[1], bmi088.data.accel.y, accelDt);
+            bmi088.data.accel.z = LPF_Update(&accelLPF[2], bmi088.data.accel.z, accelDt);
         }
 #ifdef DEBUG
 //        if(bmi088.data.gyro_updated && logIdx < LOG_SIZE){

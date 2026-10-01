@@ -17,12 +17,14 @@
 #define BMI088_CALIB_GYRO_VAR_LIMIT     0.005f
 
 typedef struct{
-    BMI088_Data_t data;
-    BMI088_Calib_t calib;
-    TaskHandle_t imuTask;
-    uint8_t gyroReady;
-    uint8_t accelReady;
-    uint8_t id;
+	BMI088_Data_t data;
+	BMI088_Calib_t calib;
+	TaskHandle_t imuTask;
+	volatile uint8_t  gyroReady;
+	volatile uint8_t  accelReady;
+	volatile uint32_t gyroIrqCycles;
+	volatile uint32_t accelIrqCycles;
+	uint8_t id;
 } BMI088_Handle_t;
 
 BMI088_Status_t BMI088_Init(void);

@@ -4,10 +4,6 @@
 #define MAGBARO_TASK_PERIOD_MS   (1000 / MAGBARO_TASK_RATE_HZ)
 #define MAG_CALIB_DURATION_MS    15000
 
-static uint32_t MagBaro_TimestampUs(void){
-    return DWT->CYCCNT / (SystemCoreClock / 1000000U);
-}
-
 void MagBaroTask(void *argument){
     uint8_t magOk  = (QMC5883_Init() == QMC5883_OK);
     uint8_t baroOk = (BMP388_Init()  == BMP388_OK);
@@ -37,7 +33,7 @@ void MagBaroTask(void *argument){
                     baro.pressure_pa   = bmp388.pressure_pa;
                     baro.temperature_c = bmp388.temperature_c;
                     baro.altitude_m    = bmp388.altitude_m;
-                    baro.timestamp_us  = MagBaro_TimestampUs();
+                    baro.timestamp_us  = Time_Us();
                     BaroTopic_Publish(&baro);
                 }
             }
@@ -57,7 +53,7 @@ void MagBaroTask(void *argument){
                     mag.x = qmc5883.field.x;
                     mag.y = qmc5883.field.y;
                     mag.z = qmc5883.field.z;
-                    mag.timestamp_us = MagBaro_TimestampUs();
+                    mag.timestamp_us = Time_Us();
                     MagTopic_Publish(&mag);
                 }
             }

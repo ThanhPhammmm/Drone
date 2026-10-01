@@ -8,6 +8,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include <stm32f4xx.h>
+#include "timebase.h"
 
 void MagBaroTask(void *argument);
 uint8_t MagBaro_IsCalibrated(void);

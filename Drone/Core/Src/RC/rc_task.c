@@ -3,7 +3,7 @@
 /* The loop wakes on the radio IRQ but also on a timeout, because failsafe is
  * exactly the case where no interrupt is ever going to arrive. */
 #define RC_TICK_MS                  20
-#define RC_TIMEOUT_MS               3000     /* no valid frame -> link lost */
+#define RC_TIMEOUT_MS               500     /* no valid frame -> link lost */
 
 #define RC_ARM_THROTTLE_MAX         0.02f   /* must be at idle to arm */
 #define RC_FAILSAFE_DESCENT_MS      (-1.0f) /* m/s */
@@ -144,7 +144,7 @@ void RCTask(void *argument){
         }
 
         rc.linkOk       = linkOk;
-        rc.timestamp_us = DWT->CYCCNT / (SystemCoreClock / 1000000U);
+        rc.timestamp_us = Time_Us();;
 
         attSp.timestamp_us = rc.timestamp_us;
         altSp.timestamp_us = rc.timestamp_us;

@@ -2,7 +2,7 @@
 
 #define ALT_CTRL_RATE_HZ        100
 #define ALT_CTRL_PERIOD_MS      (1000 / ALT_CTRL_RATE_HZ)
-#define ALT_CTRL_DT             (1.0f / (float)ALT_CTRL_RATE_HZ)
+#define dt_MAX                  0.05f   /* s, cap after a long stall */
 
 #define ALT_KP                  1.0f    /* Not yet done, need to do inspection*/
 #define ALT_VZ_LIMIT            2.0f    /* m/s */
@@ -12,7 +12,7 @@
 #define VZ_KI                   0.10f   /* Not yet done, need to do inspection*/
 #define VZ_KD                   0.0f    /* Not yet done, need to do inspection*/
 #define VZ_INTEGRAL_LIMIT       2.0f
-#define VZ_OUTPUT_LIMIT         0.50f
+#define VZ_OUTPUT_LIMIT         0.50f	/* VZ_OUTPUT_LIMIT = THRUST_MAX - HOVER_THRUST */
 #define VZ_D_CUTOFF_HZ          10.0f
 
 #define HOVER_THRUST            0.35f   /* Not yet done, need to do inspection*/
@@ -76,6 +76,7 @@ void AltitudeControllerTask(void *argument){
     float      rampStartAlt = 0.0f;
 
     TickType_t last = xTaskGetTickCount();
+    TickType_t lastRun = last;
 
     while(1){
         vTaskDelayUntil(&last, pdMS_TO_TICKS(ALT_CTRL_PERIOD_MS));
@@ -83,6 +84,10 @@ void AltitudeControllerTask(void *argument){
         if(AltitudeSetpointTopic_Copy(&setpoint, ALT_CTRL_COPY_TIMEOUT) != pdPASS) continue;
         if(AltitudeTopic_Copy(&altitude, ALT_CTRL_COPY_TIMEOUT)         != pdPASS) continue;
         if(AttitudeTopic_Copy(&attitude)         						!= pdPASS) continue;
+
+        float dt = (float)(last - lastRun) * ((float)portTICK_PERIOD_MS * 0.001f);
+        lastRun = last;
+        if(dt > dt_MAX) dt = dt_MAX;
 
         FlightMode_t mode  = (FlightMode_t)setpoint.mode;
         arm_state_t  state = Arm_GetState();
@@ -114,7 +119,7 @@ void AltitudeControllerTask(void *argument){
                 rampStartAlt = altitude.altitude;
             }
 
-            rampThrust += TAKEOFF_RAMP_RATE * ALT_CTRL_DT;
+            rampThrust += TAKEOFF_RAMP_RATE * dt;
             if(rampThrust > TAKEOFF_RAMP_MAX) rampThrust = TAKEOFF_RAMP_MAX;
             thrust = rampThrust;
 
@@ -139,7 +144,7 @@ void AltitudeControllerTask(void *argument){
                 altitudeController.holdTarget = altitude.altitude;
             }
 
-            altitudeController.holdTarget += climbRate * ALT_CTRL_DT;
+            altitudeController.holdTarget += climbRate * dt;
 
             float targetError = altitudeController.holdTarget - altitude.altitude;
             if(targetError >  ALT_TARGET_MAX_ERROR)
@@ -153,7 +158,7 @@ void AltitudeControllerTask(void *argument){
             if(vzSetpoint < -ALT_VZ_LIMIT) vzSetpoint = -ALT_VZ_LIMIT;
             altitudeController.vzSetpoint = vzSetpoint;
 
-            thrust = HOVER_THRUST + PID_Update(&vzPID, vzSetpoint, altitude.verticalSpeed, ALT_CTRL_DT);
+            thrust = HOVER_THRUST + PID_Update(&vzPID, vzSetpoint, altitude.verticalSpeed, dt);
             vzError = vzSetpoint - altitude.verticalSpeed;
 
             /* Increase thrust to compensate for the drone tilting */

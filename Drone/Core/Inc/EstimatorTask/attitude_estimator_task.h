@@ -11,6 +11,7 @@
 #include "Const.h"
 #include <stdio.h>
 #include "bmi088.h"
+#include "timebase.h"
 
 typedef struct {
 	Attitude_Data_t data;

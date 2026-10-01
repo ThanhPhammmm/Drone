@@ -35,8 +35,8 @@ void AttitudeEstimatorTask(void *argument){
 		Mag_Data_t mag = {0};
 		uint8_t magValid = 0;
 		if(ATT_EST_USE_MAG && MagTopic_Copy(&mag, 0) == pdPASS && mag.timestamp_us != 0){
-		    uint32_t age_us = imu.timestamp_us - mag.timestamp_us;
-		    if(age_us < MAG_MAX_AGE_US){
+			int32_t age_us = Time_DiffUs(imu.timestamp_us, mag.timestamp_us);
+		    if(age_us < MAG_MAX_AGE_US && age_us > -MAG_MAX_AGE_US){
 		        magValid = 1;
 		    }
 		}

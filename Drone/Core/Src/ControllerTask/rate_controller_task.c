@@ -61,10 +61,18 @@ void RateControllerTask(void *argument){
 
 	Attitude_Data_t attitude = {0};
 	RateSetpoint_Data_t setpoint = {0};
+	uint32_t lastSampleUs = 0;
+	uint8_t  haveSample   = 0;
 
 	while(1){
 		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);          /* 2 kHz, from estimator */
 		if(AttitudeTopic_Copy(&attitude) != pdPASS) continue;
+
+		if(haveSample && attitude.timestamp_us == lastSampleUs) continue;
+		float dt = haveSample ? (float)(uint32_t)(attitude.timestamp_us - lastSampleUs) * 1e-6f : 0.0f;
+		lastSampleUs = attitude.timestamp_us;
+		haveSample   = 1;
+
 		if(RateSetpointTopic_Copy(&setpoint) != pdPASS) continue;   /* latest (500 Hz) */
 
         if(ThrustTopic_Copy(&thrust, 0) == pdPASS){
@@ -76,8 +84,8 @@ void RateControllerTask(void *argument){
         	continue;
         }
 
-		uint32_t age_us = attitude.timestamp_us - setpoint.timestamp_us;
-		if(age_us > RATE_SETPOINT_MAX_AGE_US){
+		uint32_t age_us = Time_DiffUs(attitude.timestamp_us, setpoint.timestamp_us);
+		if(age_us > (int32_t)RATE_SETPOINT_MAX_AGE_US || age_us < -(int32_t)RATE_SETPOINT_MAX_AGE_US){
 			setpoint.rollRate  = 0.0f;
 			setpoint.pitchRate = 0.0f;
 			setpoint.yawRate   = 0.0f;
@@ -90,9 +98,9 @@ void RateControllerTask(void *argument){
 			RateController_ResetIntegrators();
 		}
 
-		rateController.rollTorqueOutput  = PID_Update(&rollRatePID,  setpoint.rollRate,  attitude.rollRate,  attitude.dt);
-		rateController.pitchTorqueOutput = PID_Update(&pitchRatePID, setpoint.pitchRate, attitude.pitchRate, attitude.dt);
-		rateController.yawTorqueOutput   = PID_Update(&yawRatePID,   setpoint.yawRate,   attitude.yawRate,   attitude.dt);
+		rateController.rollTorqueOutput  = PID_Update(&rollRatePID,  setpoint.rollRate,  attitude.rollRate,  dt);
+		rateController.pitchTorqueOutput = PID_Update(&pitchRatePID, setpoint.pitchRate, attitude.pitchRate, dt);
+		rateController.yawTorqueOutput   = PID_Update(&yawRatePID,   setpoint.yawRate,   attitude.yawRate,   dt);
 
 
 		Motor_Setpoint_Print(&setpoint, lastThrust);
