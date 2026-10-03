@@ -84,7 +84,7 @@ void RCTask(void *argument){
 
         Arm_Input_t armIn;
         armIn.armSwitch      = (latest.flags & RC_FLAG_ARM) ? 1U : 0U;
-        armIn.sensorsReady   = MagBaro_IsCalibrated() && BMI088_IsCalibrated();
+        armIn.sensorsReady   = Calib_ReadyToArm();;
         armIn.linkOk         = linkOk;
         armIn.linkLostMs     = (uint32_t)(age * portTICK_PERIOD_MS);
         armIn.throttleLow    = (rc.throttle < RC_ARM_THROTTLE_MAX);
@@ -149,8 +149,6 @@ void RCTask(void *argument){
 
         attSp.timestamp_us = rc.timestamp_us;
         altSp.timestamp_us = rc.timestamp_us;
-
-        RC_Print_Attitude_Setpoint(&rc, lastThrottle);
 
         RCTopic_Publish(&rc);
         AttitudeSetpointTopic_Publish(&attSp);

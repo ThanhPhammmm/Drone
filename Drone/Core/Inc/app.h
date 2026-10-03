@@ -25,7 +25,9 @@
 #define TASK_PRIO_RC				2
 
 #define TASK_PRIO_MAG				1
+#define TASK_PRIO_DEBUG				1
 
+#define STACK_DEBUG					512
 #define STACK_IMU					512
 #define STACK_MAG					384
 #define STACK_ATT_ESTIMATOR			512

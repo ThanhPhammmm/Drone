@@ -26,5 +26,6 @@ uint8_t BMP388_DataReady(void);
 BMP388_Status_t BMP388_Read(void);
 void BMP388_GroundRefReset(void);
 void BMP388_GroundRefAccumulate(void);
+void BMP388_GroundRefSet(float pressure_pa);
 
 #endif /* INC_SENSORDRIVER_BMP388_BMP388_H_ */

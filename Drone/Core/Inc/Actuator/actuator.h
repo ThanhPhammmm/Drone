@@ -15,5 +15,6 @@ typedef struct{
 void MotorOutput_Init(void);
 void MotorOutput_Update(float roll, float pitch, float yaw, float throttle, MotorSaturation_t *sat);
 void ESC_Calibrate(void);
+void MotorOutput_GetPulsesUs(float us[MOTOR_COUNT]);
 
 #endif /* INC_ACTUATOR_ACTUATOR_H_ */

@@ -102,9 +102,6 @@ void RateControllerTask(void *argument){
 		rateController.pitchTorqueOutput = PID_Update(&pitchRatePID, setpoint.pitchRate, attitude.pitchRate, dt);
 		rateController.yawTorqueOutput   = PID_Update(&yawRatePID,   setpoint.yawRate,   attitude.yawRate,   dt);
 
-
-		Motor_Setpoint_Print(&setpoint, lastThrust);
-		Motor_Torque_Print(&rateController, lastThrust);
 		MotorSaturation_t sat = {0};
         MotorOutput_Update(rateController.rollTorqueOutput, rateController.pitchTorqueOutput, rateController.yawTorqueOutput, lastThrust, &sat);
 
@@ -118,4 +115,10 @@ void RateControllerTask(void *argument){
         	PID_HoldIntegrator(&yawRatePID);
         }
 	}
+}
+
+void RateController_GetTorque(float torque[3]){
+	torque[0] = rateController.rollTorqueOutput;
+	torque[1] = rateController.pitchTorqueOutput;
+	torque[2] = rateController.yawTorqueOutput;
 }

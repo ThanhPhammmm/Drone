@@ -65,8 +65,6 @@ void AttitudeControllerTask(void *argument){
 			rate->pitchRate = ATTITUDE_KP_PITCH * (pitchCmd - attitude.pitch);
 			rate->yawRate   = setpoint.yawRate;   /* yaw commanded as rate directly */
 
-			//Attitude_Controller_Print(rate);
-
 			/* Rate Limiter */
 			rate->rollRate  = CLAMP(rate->rollRate,  -RATE_MAX_ROLL,  RATE_MAX_ROLL);
 			rate->pitchRate = CLAMP(rate->pitchRate, -RATE_MAX_PITCH, RATE_MAX_PITCH);

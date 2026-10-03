@@ -16,6 +16,8 @@
 #include "altitude_topic.h"
 #include "magbaro_task.h"
 #include "timebase.h"
+#include "calibration.h"
+#include "thrust_topic.h"
 
 void RCTask(void *argument);
 

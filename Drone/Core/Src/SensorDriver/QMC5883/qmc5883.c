@@ -61,13 +61,9 @@ QMC5883_Status_t QMC5883_Read(void){
     qmc5883.raw.y = -(int16_t)((buf[3] << 8) | buf[2]);
     qmc5883.raw.z = (int16_t)((buf[5] << 8) | buf[4]);
 
-    //QMC5883_PrintXYZ(&qmc5883.raw);
-
     qmc5883.field.x = ((float)qmc5883.raw.x - qmc5883.calib.offset[0]) / QMC5883_LSB_PER_GAUSS_8G;
     qmc5883.field.y = ((float)qmc5883.raw.y - qmc5883.calib.offset[1]) / QMC5883_LSB_PER_GAUSS_8G;
     qmc5883.field.z = ((float)qmc5883.raw.z - qmc5883.calib.offset[2]) / QMC5883_LSB_PER_GAUSS_8G;
-
-    //QMC5883_PrintXYZ_FIELD(&qmc5883.field);
 
     return QMC5883_OK;
 }
@@ -89,15 +85,28 @@ void QMC5883_CalibAccumulate(void){
     }
 }
 
-void QMC5883_CalibFinish(void){
+QMC5883_Status_t QMC5883_CalibFinish(void){
+    for(uint8_t k = 0; k < 3; k++){
+        if((qmc5883.calib.maxV[k] - qmc5883.calib.minV[k]) < QMC5883_CALIB_MIN_SPAN){
+            return QMC5883_ERROR;		/* not turned enough: offsets left untouched */
+        }
+    }
     for(uint8_t k = 0; k < 3; k++){
         qmc5883.calib.offset[k] = (qmc5883.calib.minV[k] + qmc5883.calib.maxV[k]) * 0.5f;
     }
     qmc5883.calib.calibrated = 1;
+    return QMC5883_OK;
 }
 
 uint8_t QMC5883_DataReady(void){
     uint8_t status = 0;
     if(QMC5883_ReadRegs(QMC5883_REG_STATUS, &status, 1) != QMC5883_OK) return 0;
     return (status & QMC5883_STATUS_DRDY) ? 1 : 0;
+}
+
+void QMC5883_SetOffsets(float x, float y, float z){
+    qmc5883.calib.offset[0]  = x;
+    qmc5883.calib.offset[1]  = y;
+    qmc5883.calib.offset[2]  = z;
+    qmc5883.calib.calibrated = 1;
 }

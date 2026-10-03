@@ -43,6 +43,7 @@
 #include "altitude_controller_task.h"
 #include "rc_task.h"
 #include "nrf24.h"
+#include "debug_task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -185,6 +186,9 @@ int main(void)
 	//xTaskCreate(MagTask, "MAG", STACK_MAG, NULL, TASK_PRIO_MAG, NULL);
 	xTaskCreate(MagBaroTask, "MAGBARO", STACK_MAGBARO, NULL, TASK_PRIO_MAGBARO, NULL);
 	xTaskCreate(RCTask, "RC", STACK_RC, NULL, TASK_PRIO_RC, NULL);
+#if DEBUG_PRINT
+	xTaskCreate(DebugTask, "DEBUG", STACK_DEBUG, NULL, TASK_PRIO_DEBUG, NULL);
+#endif
 	vTaskStartScheduler();
 
   /* USER CODE END 2 */

@@ -89,8 +89,6 @@ void MotorOutput_Update(float roll, float pitch, float yaw, float throttle, Moto
     for(uint8_t i = 0; i < MOTOR_COUNT; i++){
         axis[i] = rp[i] * scale + yaw * mix[i][2];
 
-        //Motor_Axis_Print(i, axis[i]);
-
         if(i == 0 || axis[i] < lo) lo = axis[i];
         if(i == 0 || axis[i] > hi) hi = axis[i];
     }
@@ -111,10 +109,6 @@ void MotorOutput_Update(float roll, float pitch, float yaw, float throttle, Moto
     for(uint8_t i = 0; i < MOTOR_COUNT; i++){
         float out = clampf(thr + axis[i], MOTOR_IDLE, MOTOR_MAX);
         motor_write(i, out);
-
-        //Debug only
-        uint32_t ccr = (uint32_t)(MOTOR_PWM_MIN + out * (MOTOR_PWM_MAX - MOTOR_PWM_MIN) + 0.5f);
-        Motor_Print(i, ccr);
     }
 }
 
@@ -134,4 +128,10 @@ void ESC_Calibrate(void){
     }
 
     //HAL_Delay(3000);
+}
+
+void MotorOutput_GetPulsesUs(float us[MOTOR_COUNT]){
+    for(uint8_t i = 0; i < MOTOR_COUNT; i++){
+        us[i] = (float)__HAL_TIM_GET_COMPARE(&MOTOR_TIM, motorChannel[i]);   /* 1 tick = 1 us */
+    }
 }

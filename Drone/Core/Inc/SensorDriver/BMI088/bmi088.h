@@ -39,5 +39,6 @@ BMI088_Status_t BMI088_Calibrate(uint32_t numSamples);
 void BMI088_Accel_Convert(void);
 void BMI088_Gyro_Convert(void);
 uint8_t BMI088_IsCalibrated(void);
+void BMI088_SetCalibration(float gx, float gy, float gz, float ax, float ay, float az);
 
 #endif /* INC_SENSORDRIVER_BMI088_BMI088_H_ */

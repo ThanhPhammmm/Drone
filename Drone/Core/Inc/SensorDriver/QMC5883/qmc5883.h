@@ -7,6 +7,8 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+#define QMC5883_CALIB_MIN_SPAN		(0.25f * QMC5883_LSB_PER_GAUSS_8G)
+
 typedef struct{
     QMC5883_Raw_t	raw;
     QMC5883_Field_t field;
@@ -20,6 +22,7 @@ uint8_t	QMC5883_DataReady(void);
 QMC5883_Status_t QMC5883_Read(void);
 void QMC5883_CalibReset(void);
 void QMC5883_CalibAccumulate(void);
-void QMC5883_CalibFinish(void);
+QMC5883_Status_t QMC5883_CalibFinish(void);
+void QMC5883_SetOffsets(float x, float y, float z);
 
 #endif /* INC_SENSORDRIVER_QMC5883_QMC5883_H_ */
