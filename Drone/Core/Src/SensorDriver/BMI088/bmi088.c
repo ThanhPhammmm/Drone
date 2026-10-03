@@ -218,8 +218,6 @@ void BMI088_ParseData(void){
 
 void BMI088_Convert(void){
 
-	//BMI088_Print_RawData(&bmi088.data);
-
     float ax = -(bmi088.data.accel_raw.x * accSensitivity * BMI088_G);
     float ay =  (bmi088.data.accel_raw.y * accSensitivity * BMI088_G);
     float az = -(bmi088.data.accel_raw.z * accSensitivity * BMI088_G);
@@ -235,8 +233,6 @@ void BMI088_Convert(void){
     bmi088.data.gyro.x = gx - bmi088.calib.gyro_bias.x;
     bmi088.data.gyro.y = gy - bmi088.calib.gyro_bias.y;
     bmi088.data.gyro.z = gz - bmi088.calib.gyro_bias.z;
-
-    //BMI088_PrintDataCSV(&bmi088.data);
 
 }
 
@@ -343,3 +339,16 @@ BMI088_Status_t BMI088_Calibrate(uint32_t numSamples){
     return BMI088_OK;
 }
 
+uint8_t BMI088_IsCalibrated(void) {
+    return bmi088.calib.calibrated;
+}
+
+void BMI088_SetCalibration(float gx, float gy, float gz, float ax, float ay, float az){
+    bmi088.calib.gyro_bias.x  = gx;
+    bmi088.calib.gyro_bias.y  = gy;
+    bmi088.calib.gyro_bias.z  = gz;
+    bmi088.calib.accel_bias.x = ax;
+    bmi088.calib.accel_bias.y = ay;
+    bmi088.calib.accel_bias.z = az;
+    bmi088.calib.calibrated   = 1;
+}

@@ -17,12 +17,14 @@
 #define BMI088_CALIB_GYRO_VAR_LIMIT     0.005f
 
 typedef struct{
-    BMI088_Data_t data;
-    BMI088_Calib_t calib;
-    TaskHandle_t imuTask;
-    uint8_t gyroReady;
-    uint8_t accelReady;
-    uint8_t id;
+	BMI088_Data_t data;
+	BMI088_Calib_t calib;
+	TaskHandle_t imuTask;
+	volatile uint8_t  gyroReady;
+	volatile uint8_t  accelReady;
+	volatile uint32_t gyroIrqCycles;
+	volatile uint32_t accelIrqCycles;
+	uint8_t id;
 } BMI088_Handle_t;
 
 BMI088_Status_t BMI088_Init(void);
@@ -36,5 +38,7 @@ void BMI088_Convert(void);
 BMI088_Status_t BMI088_Calibrate(uint32_t numSamples);
 void BMI088_Accel_Convert(void);
 void BMI088_Gyro_Convert(void);
+uint8_t BMI088_IsCalibrated(void);
+void BMI088_SetCalibration(float gx, float gy, float gz, float ax, float ay, float az);
 
 #endif /* INC_SENSORDRIVER_BMI088_BMI088_H_ */

@@ -5,6 +5,7 @@
 #include "rc_protocol.h"
 #include "rc_topic.h"
 #include "arm.h"
+#include "flight_mode.h"
 #include "attitude_setpoint_topic.h"
 #include "altitude_setpoint_topic.h"
 #include "FreeRTOS.h"
@@ -12,6 +13,11 @@
 #include <string.h>
 #include <stm32f4xx.h>
 #include "debug.h"
+#include "altitude_topic.h"
+#include "magbaro_task.h"
+#include "timebase.h"
+#include "calibration.h"
+#include "thrust_topic.h"
 
 void RCTask(void *argument);
 

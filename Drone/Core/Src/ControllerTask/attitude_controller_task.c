@@ -16,8 +16,8 @@
  * 		- Acts as a damper/brake to prevent overshoot.
  * ========================================================== */
 
-#define ATTITUDE_KP_ROLL			21.325f
-#define ATTITUDE_KP_PITCH			21.325f
+#define ATTITUDE_KP_ROLL			6.0f
+#define ATTITUDE_KP_PITCH			6.0f
 
 #define RATE_MAX_ROLL				8.0f    /* ~458 deg/s */
 #define RATE_MAX_PITCH				8.0f
@@ -51,7 +51,7 @@ void AttitudeControllerTask(void *argument){
 
 		RateSetpoint_Data_t* rate = &attitudeController.data;
 
-		if(arm_state != ARMED){
+		if(!Arm_MotorsAllowed()){
 			rate->rollRate  = 0.0f;
 			rate->pitchRate = 0.0f;
 			rate->yawRate   = 0.0f;
@@ -64,8 +64,6 @@ void AttitudeControllerTask(void *argument){
 			rate->rollRate  = ATTITUDE_KP_ROLL  * (rollCmd  - attitude.roll);
 			rate->pitchRate = ATTITUDE_KP_PITCH * (pitchCmd - attitude.pitch);
 			rate->yawRate   = setpoint.yawRate;   /* yaw commanded as rate directly */
-
-			//Attitude_Controller_Print(rate);
 
 			/* Rate Limiter */
 			rate->rollRate  = CLAMP(rate->rollRate,  -RATE_MAX_ROLL,  RATE_MAX_ROLL);

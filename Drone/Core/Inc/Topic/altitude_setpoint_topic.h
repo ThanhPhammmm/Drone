@@ -5,9 +5,9 @@
 #include <stdint.h>
 
 typedef struct{
-    float climbRate;    // m/s
-    float manualThrust; // %
-    uint8_t holdEnabled;
+    float climbRate;    // m/s, ALT_HOLD only
+    float manualThrust; // 0..1, ANGLE collective (and ALT_HOLD fallback)
+    uint8_t mode;       // FlightMode_t in force
     uint32_t timestamp_us;
 } AltitudeSetpoint_Data_t;
 
