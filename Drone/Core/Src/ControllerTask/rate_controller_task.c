@@ -11,7 +11,7 @@
 
 #define RATE_PID_KP_YAW			1.73369f
 #define RATE_PID_KI_YAW   		0.15271f
-#define RATE_PID_KD_YAW   		0.0f
+#define RATE_PID_KD_YAW   		0.00252f
 
 #define RATE_PID_INTEGRAL_LIMIT			3.0f
 #define RATE_PID_OUTPUT_LIMIT			0.4f
@@ -65,7 +65,7 @@ void RateControllerTask(void *argument){
 	uint8_t  haveSample   = 0;
 
 	while(1){
-		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);          /* 2 kHz, from estimator */
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);          /* 1 kHz, from estimator */
 		if(AttitudeTopic_Copy(&attitude) != pdPASS) continue;
 
 		if(haveSample && attitude.timestamp_us == lastSampleUs) continue;
@@ -73,7 +73,7 @@ void RateControllerTask(void *argument){
 		lastSampleUs = attitude.timestamp_us;
 		haveSample   = 1;
 
-		if(RateSetpointTopic_Copy(&setpoint) != pdPASS) continue;   /* latest (500 Hz) */
+		if(RateSetpointTopic_Copy(&setpoint) != pdPASS) continue;   /* latest (250 Hz) */
 
         if(ThrustTopic_Copy(&thrust, 0) == pdPASS){
             lastThrust = thrust.thrust;

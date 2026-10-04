@@ -17,8 +17,8 @@
  * set the flag to 0.
  * ========================================================== */
 
-#define CALIB_BMI088_RUN			0
-#define CALIB_BMP388_RUN			0
+#define CALIB_BMI088_RUN			1
+#define CALIB_BMP388_RUN			1
 #define CALIB_QMC5883_RUN			0
 
 /* BMI088 (FRD body frame): gyro rad/s, accel m/s^2 */

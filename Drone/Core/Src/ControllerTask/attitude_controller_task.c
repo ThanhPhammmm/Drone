@@ -24,7 +24,7 @@
 #define RATE_MAX_YAW				4.0f    /* ~229 deg/s */
 
 #define ATTITUDE_MAX_TILT			0.6f    /* ~34 deg */
-#define ATTITUDE_CTRL_PERIOD_MS		2       /* 500hz
+#define ATTITUDE_CTRL_PERIOD_MS		4       /* 250hz
 
  Hz */
 #define CLAMP(v, lo, hi)  ((v) < (lo) ? (lo) : ((v) > (hi) ? (hi) : (v)))

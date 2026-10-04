@@ -5,7 +5,8 @@ extern volatile uint32_t gyro_dt;
 
 SemaphoreHandle_t imuDmaSem;
 #define GYRO_LPF_CUTOFF_HZ				90.0f   /* 80-100Hz */
-#define GYRO_SAMPLE_RATE_HZ				2000.0f /* BMI088_GYRO_ODR_2000_* in bmi088.c */
+#define GYRO_SAMPLE_RATE_HZ				1000.0f
+#define ACCEL_SAMPLE_RATE_HZ            800.0f
 #define ACCEL_LPF_CUTOFF_HZ				30.0f	/* 20-50Hz	*/
 
 static BaseType_t  IMU_Signal_Init(void) {
@@ -23,8 +24,6 @@ void IMUTask(void *argument){
         Calib_SetStatus(CALIB_SENSOR_BMI088, CALIB_NO_SENSOR);
         vTaskDelete(NULL);
     }
-    BMI088_Status_t calibStatus = BMI088_Calibrate(BMI088_CALIB_DEFAULT_SAMPLES);
-    (void)calibStatus;
 #if CALIB_BMI088_RUN
     do{
         Calib_Start(CALIB_SENSOR_BMI088);
@@ -40,20 +39,20 @@ void IMUTask(void *argument){
     static uint8_t  gyroDtValid     = 0;
     static uint8_t  accelDtValid    = 0;
     static float    accelDt         = 0.0f;
-    static Biquad_t gyroLPF[3];
-    static LPF_t accelLPF[3];
+    static LPF_t gyroLPF[3];
+    static Biquad_t accelLPF[3];
 	static uint8_t lpfInit = 0;
     while(1){
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
         if(!lpfInit){
-            Biquad_InitLowpass(&gyroLPF[0], GYRO_LPF_CUTOFF_HZ, GYRO_SAMPLE_RATE_HZ);
-            Biquad_InitLowpass(&gyroLPF[1], GYRO_LPF_CUTOFF_HZ, GYRO_SAMPLE_RATE_HZ);
-            Biquad_InitLowpass(&gyroLPF[2], GYRO_LPF_CUTOFF_HZ, GYRO_SAMPLE_RATE_HZ);
+            LPF_Init(&gyroLPF[0], GYRO_LPF_CUTOFF_HZ);
+            LPF_Init(&gyroLPF[1], GYRO_LPF_CUTOFF_HZ);
+            LPF_Init(&gyroLPF[2], GYRO_LPF_CUTOFF_HZ);
 
-            LPF_Init(&accelLPF[0], ACCEL_LPF_CUTOFF_HZ);
-            LPF_Init(&accelLPF[1], ACCEL_LPF_CUTOFF_HZ);
-            LPF_Init(&accelLPF[2], ACCEL_LPF_CUTOFF_HZ);
+            Biquad_InitLowpass(&accelLPF[0], ACCEL_LPF_CUTOFF_HZ, ACCEL_SAMPLE_RATE_HZ);
+            Biquad_InitLowpass(&accelLPF[1], ACCEL_LPF_CUTOFF_HZ, ACCEL_SAMPLE_RATE_HZ);
+            Biquad_InitLowpass(&accelLPF[2], ACCEL_LPF_CUTOFF_HZ, ACCEL_SAMPLE_RATE_HZ);
 
             lpfInit = 1;
         }
@@ -97,14 +96,14 @@ void IMUTask(void *argument){
         }
 
         if(bmi088.data.gyro_updated){
-            bmi088.data.gyro.x = Biquad_Update(&gyroLPF[0], bmi088.data.gyro.x);
-            bmi088.data.gyro.y = Biquad_Update(&gyroLPF[1], bmi088.data.gyro.y);
-            bmi088.data.gyro.z = Biquad_Update(&gyroLPF[2], bmi088.data.gyro.z);
+            bmi088.data.gyro.x = LPF_Update(&gyroLPF[0], bmi088.data.gyro.x, bmi088.data.dt);
+            bmi088.data.gyro.y = LPF_Update(&gyroLPF[1], bmi088.data.gyro.y, bmi088.data.dt);
+            bmi088.data.gyro.z = LPF_Update(&gyroLPF[2], bmi088.data.gyro.z, bmi088.data.dt);
         }
         if(bmi088.data.accel_updated){
-            bmi088.data.accel.x = LPF_Update(&accelLPF[0], bmi088.data.accel.x, accelDt);
-            bmi088.data.accel.y = LPF_Update(&accelLPF[1], bmi088.data.accel.y, accelDt);
-            bmi088.data.accel.z = LPF_Update(&accelLPF[2], bmi088.data.accel.z, accelDt);
+            bmi088.data.accel.x = Biquad_Update(&accelLPF[0], bmi088.data.accel.x);
+            bmi088.data.accel.y = Biquad_Update(&accelLPF[1], bmi088.data.accel.y);
+            bmi088.data.accel.z = Biquad_Update(&accelLPF[2], bmi088.data.accel.z);
         }
         //publish to topic
         if(bmi088.data.gyro_updated){

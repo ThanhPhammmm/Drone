@@ -14,12 +14,11 @@ static uint8_t gyroRx[8];
 static uint8_t accelTx[8];
 static uint8_t accelRx[8];
 
-#define BMI088_ACC_BWP_NORMAL 	0xA0
 BMI088_Handle_t bmi088;
 extern SemaphoreHandle_t imuDmaSem;
 
-static float accSensitivity = 24.0f / 32768.0f; // Accel ±24 g: 1365 LSB/g
-static float gyroSensitivity = 2000.0f / 32768.0f; // Gyro ±2000 °/s: 16.384 LSB/(°/s)
+static float accSensitivity = 12.0f / 32768.0f; // Accel ±12 g: 2730 LSB/g
+static float gyroSensitivity = 1000.0f / 32768.0f; // Gyro ±1000 °/s: 32.768 LSB/(°/s)
 
 static void BMI088_EnableSPI(void){
     uint8_t dummy;
@@ -76,11 +75,11 @@ static BMI088_Status_t BMI088_CheckChip(void){
 static BMI088_Status_t BMI088_ConfigAccel(void){
     BMI088_Status_t status;
 
-    status = BMI088_Acc_WriteReg(BMI088_ACC_RANGE, BMI088_ACC_RANGE_24G);
+    status = BMI088_Acc_WriteReg(BMI088_ACC_RANGE, BMI088_ACC_RANGE_12G);
     if(status != BMI088_OK) return status;
     vTaskDelay(pdMS_TO_TICKS(1));
 
-    status = BMI088_Acc_WriteReg(BMI088_ACC_CONF, BMI088_ACC_BWP_NORMAL | BMI088_ACC_ODR_1600);
+    status = BMI088_Acc_WriteReg(BMI088_ACC_CONF, BMI088_ACC_BWP_OSR4 | BMI088_ACC_ODR_800);
     if(status != BMI088_OK) return status;
     vTaskDelay(pdMS_TO_TICKS(1));
 
@@ -90,11 +89,11 @@ static BMI088_Status_t BMI088_ConfigAccel(void){
 static BMI088_Status_t BMI088_ConfigGyro(void){
     BMI088_Status_t status;
 
-    status = BMI088_Gyro_WriteReg(BMI088_GYRO_RANGE, BMI088_GYRO_RANGE_2000);
+    status = BMI088_Gyro_WriteReg(BMI088_GYRO_RANGE, BMI088_GYRO_RANGE_1000);
     if(status != BMI088_OK) return status;
     vTaskDelay(pdMS_TO_TICKS(1));
 
-    status = BMI088_Gyro_WriteReg(BMI088_GYRO_BANDWIDTH, BMI088_GYRO_ODR_2000_BW_532);
+    status = BMI088_Gyro_WriteReg(BMI088_GYRO_BANDWIDTH, BMI088_GYRO_ODR_1000_BW_116);
     if(status != BMI088_OK) return status;
     vTaskDelay(pdMS_TO_TICKS(1));
 

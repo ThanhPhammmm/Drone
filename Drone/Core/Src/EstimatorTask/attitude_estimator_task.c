@@ -1,7 +1,7 @@
 #include "attitude_topic.h"
 #include "debug.h"
 
-#define MAG_MAX_AGE_US   20000U
+#define MAG_MAX_AGE_US   20000
 
 static Mahony_t mahony;
 AttitudeEstimator_Handle_t attitudeEstimator;

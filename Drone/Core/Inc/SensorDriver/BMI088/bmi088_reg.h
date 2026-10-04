@@ -129,4 +129,14 @@
 #define BMI088_GYRO_ODR_200_BW_64			0x06
 #define BMI088_GYRO_ODR_100_BW_32			0x07
 
+/*=========================================================
+ *
+ * ACC OSR
+ *
+ *========================================================*/
+
+#define BMI088_ACC_BWP_NORMAL 	            0xA0
+#define BMI088_ACC_BWP_OSR2 	            0x90
+#define BMI088_ACC_BWP_OSR4 	            0x80
+
 #endif /* INC_SENSORDRIVER_BMI088_BMI088_REG_H_ */

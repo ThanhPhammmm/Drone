@@ -175,6 +175,8 @@ int main(void)
   MX_I2C2_Init();
   MX_SPI2_Init();
   /* USER CODE BEGIN 2 */
+  MotorOutput_Init();
+  //ESC_Calibrate(); /* Dont know why it hangs */
   App_Init();
 
 	xTaskCreate(IMUTask, "IMU", STACK_IMU, NULL, TASK_PRIO_IMU, &imuTaskHandle);

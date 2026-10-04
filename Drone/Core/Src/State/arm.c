@@ -2,7 +2,7 @@
 
 #define ARM_CONFIRM_MS				500U    /* hold the switch this long to arm */
 
-#define TAKEOFF_ALT_THRESHOLD_M		0.30f
+#define TAKEOFF_ALT_THRESHOLD_M		0.50f
 #define TAKEOFF_CONFIRM_MS			500U
 #define TAKEOFF_FALLBACK_THROTTLE	0.40f   /* a bit above hover thrust: this much for this long = flying */
 #define TAKEOFF_FALLBACK_MS			500U

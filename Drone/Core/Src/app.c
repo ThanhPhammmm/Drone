@@ -17,6 +17,4 @@ void App_Init(void){
     AltitudeSetpointTopic_Init();
 
     Arm_Init();
-    MotorOutput_Init();
-    //ESC_Calibrate(); /* Dont know why it hangs */
 }
