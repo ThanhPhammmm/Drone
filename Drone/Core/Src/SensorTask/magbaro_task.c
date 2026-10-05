@@ -84,3 +84,7 @@ void MagBaroTask(void *argument){
         if(magOk)  Mag_Update();
     }
 }
+
+uint8_t MagBaro_IsCalibrated(void) {
+    return (qmc5883.calib.calibrated && bmp388.groundRef.valid);
+}

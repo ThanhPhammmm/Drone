@@ -24,7 +24,7 @@ typedef enum{
 } NRF24_Status_t;
 
 NRF24_Status_t NRF24_TX_Init(void);
-NRF24_Status_t NRF24_TX_Send(const RC_Packet_t *pkt, uint32_t timeoutMs);
+NRF24_Status_t NRF24_TX_Send(const RC_Packet_t *pkt, uint32_t timeoutMs, uint8_t *ack, uint8_t *ackLen);
 void NRF24_SetTaskHandle(TaskHandle_t handle);
 void NRF24_DMA_Callback(SPI_HandleTypeDef *hspi);
 

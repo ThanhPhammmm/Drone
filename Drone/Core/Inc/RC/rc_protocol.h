@@ -28,4 +28,53 @@ typedef struct __attribute__((packed)){
     uint8_t  flags;
 } RC_Packet_t;              /* 12 bytes */
 
+#define TLM_MAGIC               0x5A
+#define TLM_FRAME_ATTITUDE      0
+#define TLM_FRAME_OUTPUT        1
+
+/* state byte */
+#define TLM_STATE_ARM_MASK      0x07    /* arm_state_t: 0 DISARMED .. 6 FAILSAFE */
+#define TLM_STATE_MODE_SHIFT    3
+#define TLM_STATE_MODE_MASK     0x18    /* flight mode in force: 0 ANGLE, 1 ALT_HOLD, 2 POS_HOLD */
+#define TLM_STATE_IMU_CAL       0x20    /* BMI088 calibrated */
+#define TLM_STATE_MAGBARO_CAL   0x40    /* QMC5883 + BMP388 calibrated */
+#define TLM_STATE_ALT_VALID     0x80    /* altitude estimate valid */
+
+/* sat byte: what the mixer had to cut on the last rate-loop step */
+#define TLM_SAT_ROLL_PITCH      0x01
+#define TLM_SAT_YAW             0x02
+#define TLM_SAT_THR_HIGH        0x04
+#define TLM_SAT_THR_LOW         0x08
+
+typedef struct __attribute__((packed)){
+    uint8_t  magic;
+    uint8_t  type;              /* TLM_FRAME_ATTITUDE */
+    uint8_t  rcSeq;             /* seq of the last RC packet the drone received */
+    uint8_t  state;
+    int16_t  roll, pitch, yaw;  /* estimate, 0.01 deg */
+    int16_t  rollSp, pitchSp;   /* angle setpoint, 0.01 deg */
+    int16_t  rate[3];           /* gyro roll/pitch/yaw rate, 0.1 deg/s */
+    int16_t  rateSp[3];         /* rate setpoint, 0.1 deg/s */
+    int16_t  torque[3];         /* rate PID output roll/pitch/yaw, 1e-4 */
+} TLM_Attitude_t;               /* 32 bytes */
+
+typedef struct __attribute__((packed)){
+    uint8_t  magic;
+    uint8_t  type;              /* TLM_FRAME_OUTPUT */
+    uint8_t  rcSeq;
+    uint8_t  state;
+    uint16_t motor[4];          /* pulse, us: M1 FR, M2 RR, M3 RL, M4 FL */
+    uint16_t thrust;            /* collective 0..1, 1e-4 */
+    int16_t  altitude;          /* estimate, cm */
+    int16_t  baroAltitude;      /* raw baro, cm */
+    int16_t  vz;                /* vertical speed, cm/s, +up */
+    int16_t  climbSp;           /* ALT_HOLD climb-rate setpoint, cm/s */
+    int16_t  accelUp;           /* vertical acceleration, cm/s^2 */
+    uint16_t rateDtMaxUs;       /* longest rate-loop step since the previous frame */
+    uint16_t rcLost;            /* RC packets missed so far (seq gaps) */
+    uint16_t time_ms;           /* drone clock, wraps every 65.5 s */
+    uint8_t  sat;               /* TLM_SAT_* */
+    uint8_t  vibration;         /* | |raw accel| - 1 g | at the sample, 0.1 m/s^2 */
+} TLM_Output_t;                 /* 32 bytes */
+
 #endif /* INC_RC_PROTOCOL_H_ */

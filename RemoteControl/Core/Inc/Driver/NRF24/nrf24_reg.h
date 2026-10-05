@@ -8,7 +8,10 @@
 #define NRF24_CMD_FLUSH_TX          0xE1
 #define NRF24_CMD_FLUSH_RX          0xE2
 #define NRF24_CMD_NOP               0xFF
-
+#define NRF24_CMD_R_RX_PL_WID       0x60
+#define NRF24_CMD_W_ACK_PAYLOAD     0xA8
+#define NRF24_CMD_ACTIVATE          0x50
+#define NRF24_ACTIVATE_KEY          0x73
 #define NRF24_REG_CONFIG            0x00
 #define NRF24_REG_EN_AA             0x01
 #define NRF24_REG_EN_RXADDR         0x02
@@ -43,6 +46,10 @@
 /* FIFO_STATUS */
 #define NRF24_FIFO_RX_EMPTY         0x01
 #define NRF24_FIFO_TX_FULL          0x20
+#define NRF24_FEATURE_EN_DPL        0x04
+#define NRF24_FEATURE_EN_ACK_PAY    0x02
+#define NRF24_DYNPD_P0              0x01
+#define NRF24_FIFO_TX_EMPTY 		0x10
 
 /* RF_SETUP: 250 kbps for sensitivity/range, max PA for the LNA+PA module */
 #define NRF24_RF_DR_250K            0x20

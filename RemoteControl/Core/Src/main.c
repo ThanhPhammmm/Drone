@@ -21,6 +21,7 @@
 #include "adc.h"
 #include "dma.h"
 #include "spi.h"
+#include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -33,6 +34,7 @@
 #include "nrf24_tx.h"
 #include "rc_tx_task.h"
 #include "joystick.h"
+#include "telemetry.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -116,10 +118,13 @@ int main(void)
   MX_DMA_Init();
   MX_ADC1_Init();
   MX_SPI1_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   BaseType_t ret;
 
   ret = xTaskCreate(RCTxTask, "RCTX", STACK_RCTX, NULL, TASK_PRIO_RCTX, NULL);
+  configASSERT(ret == pdPASS);
+  ret = xTaskCreate(TelemetryPrintTask, "TLM", STACK_TLM, NULL, TASK_PRIO_TLM, NULL);
   configASSERT(ret == pdPASS);
   vTaskStartScheduler();
   /* USER CODE END 2 */

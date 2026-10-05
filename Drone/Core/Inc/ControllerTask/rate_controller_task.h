@@ -25,5 +25,7 @@ typedef struct {
 void RateControllerTask(void *argument);
 void RateController_SetTaskHandle(TaskHandle_t handle);
 void RateController_GetTorque(float torque[3]);
+MotorSaturation_t RateController_GetSaturation(void);
+uint32_t RateController_TakeMaxStepUs(void);
 
 #endif /* INC_CONTROLLERTASK_RATE_CONTROLLER_TASK_H_ */
