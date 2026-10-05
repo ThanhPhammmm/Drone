@@ -26,6 +26,9 @@ static PID_t rollRatePID;
 static PID_t pitchRatePID;
 static PID_t yawRatePID;
 
+static volatile MotorSaturation_t lastSat;
+static volatile uint32_t          maxStepUs;
+
 void RateController_SetTaskHandle(TaskHandle_t handle){
 	rateController.controllerTask = handle;
 }
@@ -38,6 +41,11 @@ static void RateController_Idle(void){
 	rateController.rollTorqueOutput  = 0.0f;
 	rateController.pitchTorqueOutput = 0.0f;
 	rateController.yawTorqueOutput   = 0.0f;
+
+	lastSat.rollPitchSaturated    = 0;
+	lastSat.yawSaturated          = 0;
+	lastSat.throttleSaturatedHigh = 0;
+	lastSat.throttleSaturatedLow  = 0;
 
 	MotorOutput_Update(0.0f, 0.0f, 0.0f, 0.0f, NULL);
 }
@@ -69,7 +77,9 @@ void RateControllerTask(void *argument){
 		if(AttitudeTopic_Copy(&attitude) != pdPASS) continue;
 
 		if(haveSample && attitude.timestamp_us == lastSampleUs) continue;
-		float dt = haveSample ? (float)(uint32_t)(attitude.timestamp_us - lastSampleUs) * 1e-6f : 0.0f;
+		uint32_t stepUs = haveSample ? (uint32_t)(attitude.timestamp_us - lastSampleUs) : 0U;
+		float dt = (float)stepUs * 1e-6f;
+		if(stepUs > maxStepUs) maxStepUs = stepUs;
 		lastSampleUs = attitude.timestamp_us;
 		haveSample   = 1;
 
@@ -114,6 +124,10 @@ void RateControllerTask(void *argument){
         if(sat.yawSaturated){
         	PID_HoldIntegrator(&yawRatePID);
         }
+        lastSat.rollPitchSaturated    = sat.rollPitchSaturated;
+        lastSat.yawSaturated          = sat.yawSaturated;
+        lastSat.throttleSaturatedHigh = sat.throttleSaturatedHigh;
+        lastSat.throttleSaturatedLow  = sat.throttleSaturatedLow;
 	}
 }
 
@@ -121,4 +135,21 @@ void RateController_GetTorque(float torque[3]){
 	torque[0] = rateController.rollTorqueOutput;
 	torque[1] = rateController.pitchTorqueOutput;
 	torque[2] = rateController.yawTorqueOutput;
+}
+
+MotorSaturation_t RateController_GetSaturation(void){
+	MotorSaturation_t s;
+	s.rollPitchSaturated    = lastSat.rollPitchSaturated;
+	s.yawSaturated          = lastSat.yawSaturated;
+	s.throttleSaturatedHigh = lastSat.throttleSaturatedHigh;
+	s.throttleSaturatedLow  = lastSat.throttleSaturatedLow;
+	return s;
+}
+
+uint32_t RateController_TakeMaxStepUs(void){
+	taskENTER_CRITICAL();
+	uint32_t v = maxStepUs;
+	maxStepUs = 0;
+	taskEXIT_CRITICAL();
+	return v;
 }

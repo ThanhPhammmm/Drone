@@ -31,22 +31,27 @@ void RCTask(void *argument){
     uint8_t     haveFrame = 0;
     uint8_t     lastSeq   = 0;
     TickType_t  lastFrame = xTaskGetTickCount();
+    uint16_t    rcLost    = 0;	/* seq gaps, for telemetry */
+    uint8_t     tlm[32];
 
     float lastThrottle = 0.0f;
 
     while(1){
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(RC_TICK_MS));
-
-        /* Drain the whole 3-deep FIFO and keep only the newest frame -- acting
-         * on a queued stale frame would fly the aircraft on old stick data. */
+        uint8_t gotPacket = 0;
         if(radioOk){
-            while(NRF24_ReadPacket(&pkt) == NRF24_OK){
+            for(uint8_t n = 0; n < 4; n++){         /* FIFO is 3 deep; bounded even if SPI fails */
+                NRF24_Status_t st = NRF24_ReadPacket(&pkt);
+                if(st == NRF24_EMPTY) break;
+                if(st != NRF24_OK) continue;
                 if(pkt.magic != RC_PACKET_MAGIC) continue;
                 if(haveFrame && pkt.seq == lastSeq) continue;   /* duplicate */
 
+                if(haveFrame) rcLost += (uint8_t)(pkt.seq - lastSeq - 1U);
                 lastSeq   = pkt.seq;
                 latest    = pkt;
                 haveFrame = 1;
+                gotPacket = 1;
                 lastFrame = xTaskGetTickCount();
             }
         }
@@ -153,5 +158,9 @@ void RCTask(void *argument){
         RCTopic_Publish(&rc);
         AttitudeSetpointTopic_Publish(&attSp);
         AltitudeSetpointTopic_Publish(&altSp);
+        if(gotPacket){
+            uint8_t len = Telemetry_Build(tlm, lastSeq, rcLost);
+            NRF24_WriteAckPayload(tlm, len);
+        }
     }
 }

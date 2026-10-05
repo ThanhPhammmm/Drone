@@ -15,6 +15,5 @@ void App_Init(void){
     ThrustTopic_Init();
     RCTopic_Init();
     AltitudeSetpointTopic_Init();
-
     Arm_Init();
 }
