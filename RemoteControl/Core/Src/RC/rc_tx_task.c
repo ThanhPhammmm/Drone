@@ -45,6 +45,8 @@ void RCTxTask(void *argument){
 
     TickType_t nextWake = xTaskGetTickCount();
     uint8_t linkOk = 0;
+    uint8_t ack[32];
+    uint8_t ackLen = 0;
 
     while(1){
         JOY_Read(&pkt);
@@ -62,7 +64,9 @@ void RCTxTask(void *argument){
         pkt.seq++;
 
         if(radioOk){
-        	linkOk = (NRF24_TX_Send(&pkt, NRF24_SEND_TIMEOUT_MS) == NRF24_OK);
+        	linkOk = (NRF24_TX_Send(&pkt, NRF24_SEND_TIMEOUT_MS, ack, &ackLen) == NRF24_OK);
+        	Telemetry_LinkResult(linkOk);
+        	if(linkOk && ackLen > 0) Telemetry_Decode(ack, ackLen);
         }
         else{
             radioOk = (NRF24_TX_Init() == NRF24_OK);

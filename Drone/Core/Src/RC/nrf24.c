@@ -79,6 +79,23 @@ static void NRF24_Command(uint8_t cmd){
     NRF24_Transfer(&tx, &rx, 1);
 }
 
+static NRF24_Status_t NRF24_EnableAckPayload(void){
+    const uint8_t feature = NRF24_FEATURE_EN_DPL | NRF24_FEATURE_EN_ACK_PAY;
+
+    NRF24_WriteReg(NRF24_REG_FEATURE, feature);
+    if(NRF24_ReadReg(NRF24_REG_FEATURE) != feature){
+        uint8_t tx[2] = { NRF24_CMD_ACTIVATE, NRF24_ACTIVATE_KEY };
+        uint8_t rx[2];
+        NRF24_Transfer(tx, rx, 2);
+        NRF24_WriteReg(NRF24_REG_FEATURE, feature);
+        if(NRF24_ReadReg(NRF24_REG_FEATURE) != feature) return NRF24_ERROR;
+    }
+
+    NRF24_WriteReg(NRF24_REG_DYNPD, NRF24_DYNPD_P0);
+    if(NRF24_ReadReg(NRF24_REG_DYNPD) != NRF24_DYNPD_P0) return NRF24_ERROR;
+    return NRF24_OK;
+}
+
 NRF24_Status_t NRF24_Init(void){
     if(nrf24DmaDone == NULL){
         nrf24DmaDone = xSemaphoreCreateBinary();
@@ -110,13 +127,9 @@ NRF24_Status_t NRF24_Init(void){
         return NRF24_NOT_PRESENT;
     }
     NRF24_WriteReg(NRF24_REG_RF_SETUP,   NRF24_RF_DR_250K | NRF24_RF_PWR_0DBM);
-    NRF24_WriteReg(NRF24_REG_DYNPD,      0x00);   /* static payload width */
-    if(NRF24_ReadReg(NRF24_REG_DYNPD) != 0x00){
+    if(NRF24_EnableAckPayload() != NRF24_OK){
         return NRF24_NOT_PRESENT;
     }
-    NRF24_WriteReg(NRF24_REG_FEATURE,    0x00);
-
-    NRF24_WriteReg(NRF24_REG_RX_PW_P0,   sizeof(RC_Packet_t));
 
     NRF24_WriteRegMulti(NRF24_REG_RX_ADDR_P0, nrf24Address, NRF24_ADDR_WIDTH);
     NRF24_WriteRegMulti(NRF24_REG_TX_ADDR,    nrf24Address, NRF24_ADDR_WIDTH);
@@ -130,6 +143,7 @@ NRF24_Status_t NRF24_Init(void){
     vTaskDelay(pdMS_TO_TICKS(2));                       /* power-up -> standby */
 
     NRF24_Command(NRF24_CMD_FLUSH_RX);
+    NRF24_Command(NRF24_CMD_FLUSH_TX);
     NRF24_WriteReg(NRF24_REG_STATUS,
         NRF24_STATUS_RX_DR | NRF24_STATUS_TX_DS | NRF24_STATUS_MAX_RT);
 
@@ -139,22 +153,42 @@ NRF24_Status_t NRF24_Init(void){
 }
 
 NRF24_Status_t NRF24_ReadPacket(RC_Packet_t *pkt){
-    uint8_t fifo = NRF24_ReadReg(NRF24_REG_FIFO_STATUS);
-    uint8_t status = NRF24_ReadReg(NRF24_REG_STATUS);
     if(NRF24_ReadReg(NRF24_REG_FIFO_STATUS) & NRF24_FIFO_RX_EMPTY){
-        fifo = NRF24_ReadReg(NRF24_REG_FIFO_STATUS);
-        status = NRF24_ReadReg(NRF24_REG_STATUS);
         return NRF24_EMPTY;
     }
 
-    uint8_t tx[1 + sizeof(RC_Packet_t)] = { NRF24_CMD_R_RX_PAYLOAD };
-    uint8_t rx[1 + sizeof(RC_Packet_t)];
+    uint8_t wtx[2] = { NRF24_CMD_R_RX_PL_WID, NRF24_CMD_NOP };
+    uint8_t wrx[2] = { 0 };
+    if(!NRF24_Transfer(wtx, wrx, 2)) return NRF24_ERROR;
+    uint8_t width = wrx[1];
 
-    if(!NRF24_Transfer(tx, rx, sizeof(RC_Packet_t) + 1)) return NRF24_ERROR;
+    if(width == 0 || width > 32){
+        NRF24_Command(NRF24_CMD_FLUSH_RX);
+        NRF24_WriteReg(NRF24_REG_STATUS, NRF24_STATUS_RX_DR);
+        return NRF24_ERROR;
+    }
 
+    uint8_t tx[1 + 32] = { NRF24_CMD_R_RX_PAYLOAD };
+    uint8_t rx[1 + 32];
+    if(!NRF24_Transfer(tx, rx, (uint16_t)(width + 1))) return NRF24_ERROR;
+
+    NRF24_WriteReg(NRF24_REG_STATUS, NRF24_STATUS_RX_DR | NRF24_STATUS_TX_DS);
+
+    if(width != sizeof(RC_Packet_t)) return NRF24_ERROR;
     memcpy(pkt, &rx[1], sizeof(RC_Packet_t));
-
-    NRF24_WriteReg(NRF24_REG_STATUS, NRF24_STATUS_RX_DR);
-
     return NRF24_OK;
+}
+
+NRF24_Status_t NRF24_WriteAckPayload(const void *data, uint8_t len){
+    if(len == 0 || len > 32) return NRF24_ERROR;
+
+    if(NRF24_ReadReg(NRF24_REG_FIFO_STATUS) & NRF24_FIFO_TX_FULL){
+        NRF24_Command(NRF24_CMD_FLUSH_TX);
+    }
+
+    uint8_t tx[1 + 32];
+    uint8_t rx[1 + 32];
+    tx[0] = NRF24_CMD_W_ACK_PAYLOAD | 0x00;      /* pipe 0 */
+    memcpy(&tx[1], data, len);
+    return NRF24_Transfer(tx, rx, (uint16_t)(len + 1)) ? NRF24_OK : NRF24_ERROR;
 }

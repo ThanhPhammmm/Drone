@@ -8,6 +8,7 @@
 #include "spi.h"
 #include "nrf24_reg.h"
 #include <string.h>
+#include "telemetry.h"
 
 #define NRF24_SPI               hspi2
 #define NRF24_CSN_PORT          GPIOA
@@ -31,4 +32,6 @@ NRF24_Status_t NRF24_ReadPacket(RC_Packet_t *pkt);
 void NRF24_SetTaskHandle(TaskHandle_t handle);
 void NRF24_IRQ_Handler(void);
 void NRF24_DMA_Callback(SPI_HandleTypeDef *hspi);
+NRF24_Status_t NRF24_WriteAckPayload(const void *data, uint8_t len);
+
 #endif /* INC_RC_NRF24_H_ */

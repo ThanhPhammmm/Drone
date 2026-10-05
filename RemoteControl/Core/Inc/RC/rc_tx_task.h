@@ -3,6 +3,7 @@
 
 #include "rc_protocol.h"
 #include <stdint.h>
+#include "telemetry.h"
 
 typedef struct{
     RC_Packet_t lastSent;
