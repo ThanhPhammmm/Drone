@@ -43,6 +43,7 @@
 #include "altitude_controller_task.h"
 #include "rc_task.h"
 #include "nrf24.h"
+#include "debug_task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -113,13 +114,19 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 
     BaseType_t hpw = pdFALSE;
 
-    if(GPIO_Pin == BMI088_GYRO_INT_Pin && bmi088.gyroReady == false){
-    	bmi088.gyroReady = true;
-    	vTaskNotifyGiveFromISR(bmi088.imuTask, &hpw);
-    }
-    if(GPIO_Pin == BMI088_ACCEL_INT_Pin && bmi088.accelReady == false){
-    	bmi088.accelReady = true;
-    	vTaskNotifyGiveFromISR(bmi088.imuTask, &hpw);
+	if(GPIO_Pin == BMI088_GYRO_INT_Pin){
+		bmi088.gyroIrqCycles = DWT->CYCCNT;
+		if(bmi088.gyroReady == false){
+			bmi088.gyroReady = true;
+			vTaskNotifyGiveFromISR(bmi088.imuTask, &hpw);
+		}
+	}
+    if(GPIO_Pin == BMI088_ACCEL_INT_Pin){
+    	bmi088.accelIrqCycles = DWT->CYCCNT;
+    	if(bmi088.accelReady == false){
+			bmi088.accelReady = true;
+			vTaskNotifyGiveFromISR(bmi088.imuTask, &hpw);
+    	}
     }
     portYIELD_FROM_ISR(hpw);
 }
@@ -168,17 +175,22 @@ int main(void)
   MX_I2C2_Init();
   MX_SPI2_Init();
   /* USER CODE BEGIN 2 */
+  MotorOutput_Init();
+  //ESC_Calibrate(); /* Dont know why it hangs */
   App_Init();
 
 	xTaskCreate(IMUTask, "IMU", STACK_IMU, NULL, TASK_PRIO_IMU, &imuTaskHandle);
 	xTaskCreate(AttitudeEstimatorTask, "ATT", STACK_ATT_ESTIMATOR, NULL, TASK_PRIO_ATT_ESTIMATOR, NULL);
-	xTaskCreate(AttitudeControllerTask, "ATTCTRL", STACK_ATTITUDE_CTRL, NULL, TASK_PRIO_ATTITUDE_CTRL, NULL);
+	xTaskCreate(AttitudeControllerTask, "ATTCTRL", STACK_ATTITUDE_CTRL, NULL, TASK_PRIO_ATT_CTRL, NULL);
 	xTaskCreate(RateControllerTask, "RATECTRL", STACK_RATE, NULL, TASK_PRIO_RATE, NULL);
 	xTaskCreate(AltitudeEstimatorTask, "ALTEST", STACK_ALT_ESTIMATOR, NULL, TASK_PRIO_ALT_ESTIMATOR, NULL);
 	xTaskCreate(AltitudeControllerTask, "ALTCTRL", STACK_ALT_CTRL, NULL, TASK_PRIO_ALT_CTRL, NULL);
 	//xTaskCreate(MagTask, "MAG", STACK_MAG, NULL, TASK_PRIO_MAG, NULL);
 	xTaskCreate(MagBaroTask, "MAGBARO", STACK_MAGBARO, NULL, TASK_PRIO_MAGBARO, NULL);
 	xTaskCreate(RCTask, "RC", STACK_RC, NULL, TASK_PRIO_RC, NULL);
+#if DEBUG_PRINT
+	xTaskCreate(DebugTask, "DEBUG", STACK_DEBUG, NULL, TASK_PRIO_DEBUG, NULL);
+#endif
 	vTaskStartScheduler();
 
   /* USER CODE END 2 */

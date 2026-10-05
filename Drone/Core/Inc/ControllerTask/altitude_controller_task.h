@@ -11,6 +11,7 @@
 #include "pid.h"
 #include <math.h>
 #include "arm.h"
+#include "flight_mode.h"
 
 typedef struct{
     Thrust_Data_t data;

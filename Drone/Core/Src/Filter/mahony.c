@@ -8,6 +8,12 @@
 
 #define MAHONY_DT_MAX           0.05f
 
+/* Earth field is 0.25..0.65 G. Outside this band the reading is a bad
+ * calibration or motor/ESC current, not the earth. */
+#define MAHONY_MAG_NORM_MIN     0.15f     /* gauss */
+#define MAHONY_MAG_NORM_MAX     1.00f     /* gauss */
+#define MAHONY_MAG_WEIGHT       0.2f      /* heading error (rad) -> correction, relative to kp */
+
 static inline float mahony_clamp(float v, float lim){
     return v < -lim ? -lim : (v > lim ? lim : v);
 }
@@ -23,6 +29,19 @@ static inline uint8_t normalize3(float *x, float *y,float *z){
     *z *= norm;
 
     return 1;
+}
+
+/* Rotate the quaternion about the earth vertical by `dyaw` (rad). */
+static void mahony_rotate_yaw(Mahony_t *m, float dyaw){
+    float c = cosf(0.5f * dyaw);
+    float s = sinf(0.5f * dyaw);
+    float q0 = m->q[0], q1 = m->q[1], q2 = m->q[2], q3 = m->q[3];
+
+    /* q' = (c, 0, 0, s) * q  -- earth-frame rotation */
+    m->q[0] = c*q0 - s*q3;
+    m->q[1] = c*q1 - s*q2;
+    m->q[2] = c*q2 + s*q1;
+    m->q[3] = c*q3 + s*q0;
 }
 
 void Mahony_Init(Mahony_t *m, float kp,float ki){
@@ -69,12 +88,16 @@ void Mahony_Update(Mahony_t *m, const BMI088_Data_t *imu, const float mag[3], ui
     float ey = 0.0f;
     float ez = 0.0f;
 
-    if(accValid){
-        // predicted direction of gravity
-        float vx = -2.0f*(q1*q3 - q0*q2);
-        float vy = -2.0f*(q0*q1 + q2*q3);
-        float vz = -(q0*q0 - q1*q1 - q2*q2 + q3*q3);
+    float hex = 0.0f;
+    float hey = 0.0f;
+    float hez = 0.0f;
 
+    // predicted direction of gravity
+    float vx = -2.0f*(q1*q3 - q0*q2);
+    float vy = -2.0f*(q0*q1 + q2*q3);
+    float vz = -(q0*q0 - q1*q1 - q2*q2 + q3*q3);
+
+    if(accValid){
         ex = ay*vz - az*vy;
         ey = az*vx - ax*vz;
         ez = ax*vy - ay*vx;
@@ -83,24 +106,31 @@ void Mahony_Update(Mahony_t *m, const BMI088_Data_t *imu, const float mag[3], ui
     float mx = mag[0];
     float my = mag[1];
     float mz = mag[2];
-    if(magValid && normalize3(&mx, &my, &mz)){
+    float mNorm = sqrtf(mx*mx + my*my + mz*mz);
+    if(magValid && mNorm > MAHONY_MAG_NORM_MIN && mNorm < MAHONY_MAG_NORM_MAX){
+        mx /= mNorm;
+        my /= mNorm;
+        mz /= mNorm;
         // measured magnetic field → world frame
         float hx = 2.0f*mx*(0.5f - q2*q2 - q3*q3) + 2.0f*my*(q1*q2 - q0*q3) + 2.0f*mz*(q1*q3 + q0*q2);
         float hy = 2.0f*mx*(q1*q2 + q0*q3) + 2.0f*my*(0.5f - q1*q1 - q3*q3) + 2.0f*mz*(q2*q3 - q0*q1);
 
-        // magnetic reference field
-        // NED frame (North-East-Down) -> by = 0
-        float bx = sqrtf(hx*hx + hy*hy);
-        float bz = 2.0f*mx*(q1*q3 - q0*q2) + 2.0f*my*(q2*q3 + q0*q1) + 2.0f*mz*(0.5f - q1*q1 - q2*q2);
+        if(hx*hx + hy*hy > 1e-6f){
+            // heading error, magnetic north = yaw 0 (declination ignored)
+            float headingErr = atan2f(hy, hx);
 
-        // reference magnetic field → body frame
-        float wx = 2.0f*bx*(0.5f - q2*q2 - q3*q3) + 2.0f*bz*(q1*q3 - q0*q2);
-        float wy = 2.0f*bx*(q1*q2 - q0*q3) + 2.0f*bz*(q0*q1 + q2*q3);
-        float wz = 2.0f*bx*(q0*q2 + q1*q3) + 2.0f*bz*(0.5f - q1*q1 - q2*q2);
-
-        ex += (my*wz - mz*wy);
-        ey += (mz*wx - mx*wz);
-        ez += (mx*wy - my*wx);
+            if(!m->headingAligned){
+                /* start from the magnetometer heading instead of converging to it */
+                mahony_rotate_yaw(m, -headingErr);
+                m->headingAligned = 1;
+                q0 = m->q[0]; q1 = m->q[1]; q2 = m->q[2]; q3 = m->q[3];
+                headingErr = 0.0f;
+            }
+            headingErr *= MAHONY_MAG_WEIGHT;
+            hex = headingErr * vx;
+            hey = headingErr * vy;
+            hez = headingErr * vz;
+        }
     }
 
     m->bias[0] = mahony_clamp(m->bias[0] + m->ki * ex * dt, MAHONY_BIAS_LIMIT);
@@ -111,10 +141,10 @@ void Mahony_Update(Mahony_t *m, const BMI088_Data_t *imu, const float mag[3], ui
     m->rate[1] = imu->gyro.y + m->bias[1];
     m->rate[2] = imu->gyro.z + m->bias[2];
 
-    float gx = m->rate[0] + m->kp * ex;
-    float gy = m->rate[1] + m->kp * ey;
-    float gz = m->rate[2] + m->kp * ez;
-
+    float gx = m->rate[0] + m->kp * (ex + hex);
+    float gy = m->rate[1] + m->kp * (ey + hey);
+    float gz = m->rate[2] + m->kp * (ez + hez);
+    
     float dq0 = 0.5f * (-q1*gx - q2*gy - q3*gz);
     float dq1 = 0.5f * ( q0*gx + q2*gz - q3*gy);
     float dq2 = 0.5f * ( q0*gy - q1*gz + q3*gx);
@@ -165,4 +195,8 @@ void Mahony_GetRate(const Mahony_t *m, float rate[3]){
     rate[0] = m->rate[0];
     rate[1] = m->rate[1];
     rate[2] = m->rate[2];
+}
+
+void Mahony_ResetHeading(Mahony_t *m){
+    m->headingAligned = 0;
 }

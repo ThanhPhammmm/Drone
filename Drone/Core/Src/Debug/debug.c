@@ -110,6 +110,24 @@ void BMI088_PrintAttitude(const Attitude_Data_t* attitude){
 	}
 }
 
+void BMI088_PrintAttitudeRate(const Attitude_Data_t* attitude){
+	static char buf[128];
+	static uint32_t last_print_time = 0;
+	uint32_t current_time = HAL_GetTick();
+
+	if (current_time - last_print_time < 1000)
+		return;
+
+	if (huart1.gState != HAL_UART_STATE_READY)
+		return;
+
+	int len = snprintf(buf, sizeof(buf), "rate estimator: roll: %.6f, pitch: %.6f, yaw: %.6f\r\n", attitude->rollRate,attitude->pitchRate, attitude->yawRate);
+
+	if (HAL_UART_Transmit_DMA(&huart1, (uint8_t *)buf, len) == HAL_OK){
+		last_print_time = current_time;
+	}
+}
+
 void QMC5883_PrintXYZ(const QMC5883_Raw_t* qmc5883){
 	static char buf[128];
 	static uint32_t last_print_time = 0;
@@ -201,7 +219,7 @@ void Motor_Setpoint_Print(RateSetpoint_Data_t* setpoint, const float thrust){
 		return;
 
 	int len = snprintf(buf, sizeof(buf),
-		"%.6f, %.6f, %.6f, %.6f\r\n",
+		"setpoint rate: %.6f, %.6f, %.6f, %.6f\r\n",
 		setpoint->rollRate,setpoint->pitchRate, setpoint->yawRate, thrust);
 
 	if (HAL_UART_Transmit_DMA(&huart1, (uint8_t *)buf, len) == HAL_OK){
@@ -241,9 +259,29 @@ void Motor_Torque_Print(RateController_Handle_t* torque, const float thrust){
 		return;
 
 	int len = snprintf(buf, sizeof(buf),
-		"%.6f, %.6f, %.6f, %.6f\r\n", torque->rollTorqueOutput,torque->pitchTorqueOutput, torque->yawTorqueOutput, thrust);
+		"rollTorque: %.6f, pitchTorqueOutput: %.6f, yawTorqueOutput: %.6f, thrust: %.6f\r\n", torque->rollTorqueOutput,torque->pitchTorqueOutput, torque->yawTorqueOutput, thrust);
 
 	if (HAL_UART_Transmit_DMA(&huart1, (uint8_t *)buf, len) == HAL_OK){
 		last_print_time = current_time;
+	}
+}
+
+uint32_t current_time_1_[4] = {0};
+uint32_t last_print_time_1_[4] = {0};
+
+void Motor_Axis_Print(const int i, const float axis){
+	static char buf[128];
+	current_time_1_[i] = HAL_GetTick();
+
+	if (current_time_1_[i] - last_print_time_1_[i] < 1000)
+		return;
+
+	if (huart1.gState != HAL_UART_STATE_READY)
+		return;
+
+	int len = snprintf(buf, sizeof(buf), "axis %d: %.6f\r\n", i, axis);
+
+	if (HAL_UART_Transmit_DMA(&huart1, (uint8_t *)buf, len) == HAL_OK){
+		last_print_time_1_[i] = current_time_1_[i];
 	}
 }

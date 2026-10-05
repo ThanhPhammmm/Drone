@@ -1,4 +1,4 @@
-#include "motor_output.h"
+#include "actuator.h"
 #include "tim.h"
 #include "arm.h"
 #include "debug.h"
@@ -6,7 +6,7 @@
 #define MOTOR_TIM      htim4
 #define MOTOR_PWM_MIN  1000.0f   /* µs = throttle 0 / disarmed */
 #define MOTOR_PWM_MAX  2000.0f   /* µs = throttle 1 */
-#define MOTOR_IDLE     0.1f     /* spin-min when ARMED (0..1); set 0.0f for very first test */
+#define MOTOR_IDLE     0.05f     /* spin-min while motors are allowed to move (0..1) */
 #define MOTOR_MAX      1.0f
 
 #define MOTOR_DESAT_MIN_THROTTLE  0.05f
@@ -39,44 +39,76 @@ void MotorOutput_Init(void){
     }
 }
 
-void MotorOutput_Update(float roll, float pitch, float yaw, float throttle){
+void MotorOutput_Update(float roll, float pitch, float yaw, float throttle, MotorSaturation_t *sat){
+	if(sat){
+		sat->rollPitchSaturated		= 0;
+		sat->yawSaturated			= 0;
+		sat->throttleSaturatedHigh	= 0;
+		sat->throttleSaturatedLow	= 0;
+	}
+
 	if(!Arm_MotorsAllowed()){
-        for(uint8_t i = 0; i < MOTOR_COUNT; i++) motor_write(i, 0.0f);
+		/* ARMED_GROUND spins the props at idle, everything else keeps them stopped */
+		float idle = Arm_GroundIdle() ? MOTOR_IDLE : 0.0f;
+        for(uint8_t i = 0; i < MOTOR_COUNT; i++) motor_write(i, idle);
         return;
     }
 
-    float axis[MOTOR_COUNT];
+    const float available = MOTOR_MAX - MOTOR_IDLE;
+
+    /* Roll/pitch first: they keep the aircraft upright. */
+    float rp[MOTOR_COUNT];
     float lo = 0.0f, hi = 0.0f;
 
     for(uint8_t i = 0; i < MOTOR_COUNT; i++){
-        axis[i] = roll  * mix[i][0]
-                + pitch * mix[i][1]
-                + yaw   * mix[i][2];
+        rp[i] = roll  * mix[i][0]
+              + pitch * mix[i][1];
+
+        if(i == 0 || rp[i] < lo) lo = rp[i];
+        if(i == 0 || rp[i] > hi) hi = rp[i];
+    }
+
+    float scale = 1.0f;
+    if((hi - lo) > available){
+        scale = available / (hi - lo);
+        lo *= scale;
+        hi *= scale;
+        if(sat) sat->rollPitchSaturated = 1;
+    }
+
+    /* Yaw only gets the room roll/pitch left, so a large yaw demand can never
+     * scale roll/pitch down. The yaw mix is +-1, so |yaw| <= headroom/2 cannot
+     * push the spread past `available`. */
+    float yawMax = 0.5f * (available - (hi - lo));
+    if(yaw > yawMax || yaw < -yawMax){
+        yaw = clampf(yaw, -yawMax, yawMax);
+        if(sat) sat->yawSaturated = 1;
+    }
+
+    float axis[MOTOR_COUNT];
+    for(uint8_t i = 0; i < MOTOR_COUNT; i++){
+        axis[i] = rp[i] * scale + yaw * mix[i][2];
 
         if(i == 0 || axis[i] < lo) lo = axis[i];
         if(i == 0 || axis[i] > hi) hi = axis[i];
     }
 
-    const float available = MOTOR_MAX - MOTOR_IDLE;
-    float range = hi - lo;
-    float scale = 1.0f;
+    /* Air-mode: lift the collective so a torque demand can still be met at low
+     * throttle. Only once airborne -- on the ground it lets the attitude loop
+     * raise one side of the frame and flip it over its own legs. */
+    float thrMin = (Arm_IsAirborne() && throttle > MOTOR_DESAT_MIN_THROTTLE) ? (MOTOR_IDLE - lo) : MOTOR_IDLE;
+    float thrMax = MOTOR_MAX - hi;
 
-    if(range > available && range > 0.0f){
-        scale = available / range;
-        lo *= scale;
-        hi *= scale;
-    }
+    float thr = clampf(throttle, thrMin, thrMax);
 
-    float thrMin = (throttle > MOTOR_DESAT_MIN_THROTTLE) ? (MOTOR_IDLE - lo)
-                                                         : MOTOR_IDLE;
-    float thr = clampf(throttle, thrMin, MOTOR_MAX - hi);
+    if(sat){
+    	if(throttle > thrMax) sat->throttleSaturatedHigh = 1;
+    	if(throttle < thrMin) sat->throttleSaturatedLow  = 1;
+	}
 
     for(uint8_t i = 0; i < MOTOR_COUNT; i++){
-        motor_write(i, clampf(thr + axis[i] * scale, MOTOR_IDLE, MOTOR_MAX));
-
-        //Debug only
-        uint32_t ccr = MOTOR_PWM_MIN + clampf(thr + axis[i] * scale, MOTOR_IDLE, MOTOR_MAX) * (MOTOR_PWM_MAX - MOTOR_PWM_MIN) + 0.5f;
-        Motor_Print(i, ccr);
+        float out = clampf(thr + axis[i], MOTOR_IDLE, MOTOR_MAX);
+        motor_write(i, out);
     }
 }
 
@@ -96,4 +128,10 @@ void ESC_Calibrate(void){
     }
 
     //HAL_Delay(3000);
+}
+
+void MotorOutput_GetPulsesUs(float us[MOTOR_COUNT]){
+    for(uint8_t i = 0; i < MOTOR_COUNT; i++){
+        us[i] = (float)__HAL_TIM_GET_COMPARE(&MOTOR_TIM, motorChannel[i]);   /* 1 tick = 1 us */
+    }
 }

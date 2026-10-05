@@ -182,3 +182,10 @@ void BMP388_GroundRefAccumulate(void){
         bmp388.groundRef.valid = 1;
     }
 }
+
+void BMP388_GroundRefSet(float pressure_pa){
+    bmp388.groundRef.pressureSum = 0.0f;
+    bmp388.groundRef.samples     = 0;
+    bmp388.groundRef.pressure_pa = pressure_pa;
+    bmp388.groundRef.valid       = 1;
+}

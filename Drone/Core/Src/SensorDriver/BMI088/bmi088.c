@@ -14,12 +14,11 @@ static uint8_t gyroRx[8];
 static uint8_t accelTx[8];
 static uint8_t accelRx[8];
 
-#define BMI088_ACC_BWP_NORMAL 	0xA0
 BMI088_Handle_t bmi088;
 extern SemaphoreHandle_t imuDmaSem;
 
-static float accSensitivity = 24.0f / 32768.0f; // Accel ±24 g: 1365 LSB/g
-static float gyroSensitivity = 2000.0f / 32768.0f; // Gyro ±2000 °/s: 16.384 LSB/(°/s)
+static float accSensitivity = 12.0f / 32768.0f; // Accel ±12 g: 2730 LSB/g
+static float gyroSensitivity = 1000.0f / 32768.0f; // Gyro ±1000 °/s: 32.768 LSB/(°/s)
 
 static void BMI088_EnableSPI(void){
     uint8_t dummy;
@@ -76,11 +75,11 @@ static BMI088_Status_t BMI088_CheckChip(void){
 static BMI088_Status_t BMI088_ConfigAccel(void){
     BMI088_Status_t status;
 
-    status = BMI088_Acc_WriteReg(BMI088_ACC_RANGE, BMI088_ACC_RANGE_24G);
+    status = BMI088_Acc_WriteReg(BMI088_ACC_RANGE, BMI088_ACC_RANGE_12G);
     if(status != BMI088_OK) return status;
     vTaskDelay(pdMS_TO_TICKS(1));
 
-    status = BMI088_Acc_WriteReg(BMI088_ACC_CONF, BMI088_ACC_BWP_NORMAL | BMI088_ACC_ODR_1600);
+    status = BMI088_Acc_WriteReg(BMI088_ACC_CONF, BMI088_ACC_BWP_OSR4 | BMI088_ACC_ODR_800);
     if(status != BMI088_OK) return status;
     vTaskDelay(pdMS_TO_TICKS(1));
 
@@ -90,11 +89,11 @@ static BMI088_Status_t BMI088_ConfigAccel(void){
 static BMI088_Status_t BMI088_ConfigGyro(void){
     BMI088_Status_t status;
 
-    status = BMI088_Gyro_WriteReg(BMI088_GYRO_RANGE, BMI088_GYRO_RANGE_2000);
+    status = BMI088_Gyro_WriteReg(BMI088_GYRO_RANGE, BMI088_GYRO_RANGE_1000);
     if(status != BMI088_OK) return status;
     vTaskDelay(pdMS_TO_TICKS(1));
 
-    status = BMI088_Gyro_WriteReg(BMI088_GYRO_BANDWIDTH, BMI088_GYRO_ODR_2000_BW_532);
+    status = BMI088_Gyro_WriteReg(BMI088_GYRO_BANDWIDTH, BMI088_GYRO_ODR_1000_BW_116);
     if(status != BMI088_OK) return status;
     vTaskDelay(pdMS_TO_TICKS(1));
 
@@ -218,8 +217,6 @@ void BMI088_ParseData(void){
 
 void BMI088_Convert(void){
 
-	//BMI088_Print_RawData(&bmi088.data);
-
     float ax = -(bmi088.data.accel_raw.x * accSensitivity * BMI088_G);
     float ay =  (bmi088.data.accel_raw.y * accSensitivity * BMI088_G);
     float az = -(bmi088.data.accel_raw.z * accSensitivity * BMI088_G);
@@ -235,8 +232,6 @@ void BMI088_Convert(void){
     bmi088.data.gyro.x = gx - bmi088.calib.gyro_bias.x;
     bmi088.data.gyro.y = gy - bmi088.calib.gyro_bias.y;
     bmi088.data.gyro.z = gz - bmi088.calib.gyro_bias.z;
-
-    //BMI088_PrintDataCSV(&bmi088.data);
 
 }
 
@@ -343,3 +338,16 @@ BMI088_Status_t BMI088_Calibrate(uint32_t numSamples){
     return BMI088_OK;
 }
 
+uint8_t BMI088_IsCalibrated(void) {
+    return bmi088.calib.calibrated;
+}
+
+void BMI088_SetCalibration(float gx, float gy, float gz, float ax, float ay, float az){
+    bmi088.calib.gyro_bias.x  = gx;
+    bmi088.calib.gyro_bias.y  = gy;
+    bmi088.calib.gyro_bias.z  = gz;
+    bmi088.calib.accel_bias.x = ax;
+    bmi088.calib.accel_bias.y = ay;
+    bmi088.calib.accel_bias.z = az;
+    bmi088.calib.calibrated   = 1;
+}
