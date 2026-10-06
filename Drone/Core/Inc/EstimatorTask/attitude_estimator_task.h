@@ -13,6 +13,7 @@
 #include "bmi088.h"
 #include "timebase.h"
 #include "flight_mode.h"
+#include "arm.h"
 #include "mahony.h"
 
 /* ANGLE and ALT_HOLD never use the yaw angle (yaw is flown as a rate), so the

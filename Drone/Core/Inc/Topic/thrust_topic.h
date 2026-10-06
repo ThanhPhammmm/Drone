@@ -6,6 +6,7 @@
 
 typedef struct{
     float thrust;
+    float hoverThrust;      /* thrust that hovers, measured in flight; 0 = not known yet */
     uint8_t holdActive;
     uint32_t timestamp_us;
 } Thrust_Data_t;

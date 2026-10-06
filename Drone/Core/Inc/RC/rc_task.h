@@ -14,6 +14,7 @@
 #include <stm32f4xx.h>
 #include "debug.h"
 #include "altitude_topic.h"
+#include "attitude_topic.h"
 #include "magbaro_task.h"
 #include "timebase.h"
 #include "calibration.h"

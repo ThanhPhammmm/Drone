@@ -1,20 +1,34 @@
 #include "rate_controller_task.h"
 #include "debug.h"
 
-#define RATE_PID_KP_ROLL		0.31610f
-#define RATE_PID_KI_ROLL		0.01132f
-#define RATE_PID_KD_ROLL		0.00510f
+/* ==========================================================
+ * 						RATE PID TUNING
+ * ==========================================================
+ * Tuning on the real drone, a few cm off the ground, one step at a time:
+ *   - fast buzz / shaking / hot motors			-> P or D too high: back off 20%
+ *   - slow wobble after a stick input			-> P too low: +20% at a time
+ *   - leans and creeps back slowly in hover	-> I (or the level calibration)
+ * Stop raising P at the first sign of buzz and go back two steps.
+ * ========================================================== */
 
-#define RATE_PID_KP_PITCH 		0.31610f
-#define RATE_PID_KI_PITCH 		0.01132f
-#define RATE_PID_KD_PITCH 		0.00510f
+#define RATE_PID_KP_ROLL		0.050f
+#define RATE_PID_KI_ROLL		0.150f
+#define RATE_PID_KD_ROLL		0.00075f
 
-#define RATE_PID_KP_YAW			1.73369f
-#define RATE_PID_KI_YAW   		0.15271f
-#define RATE_PID_KD_YAW   		0.00252f
+#define RATE_PID_KP_PITCH 		0.050f
+#define RATE_PID_KI_PITCH 		0.150f
+#define RATE_PID_KD_PITCH 		0.00075f
 
-#define RATE_PID_INTEGRAL_LIMIT			3.0f
+#define RATE_PID_KP_YAW			0.30f
+#define RATE_PID_KI_YAW   		0.10f
+#define RATE_PID_KD_YAW   		0.0f
+
+#define RATE_PID_I_MAX_ROLL_PITCH		0.15f
+#define RATE_PID_I_MAX_YAW				0.10f
+#define RATE_PID_INTEGRAL_LIMIT(iMax, ki)	(((ki) > 0.0f) ? ((iMax) / (ki)) : 0.0f)
+
 #define RATE_PID_OUTPUT_LIMIT			0.4f
+#define RATE_PID_OUTPUT_LIMIT_YAW		0.25f	/* yaw never takes more than this of the motor range */
 #define RATE_PID_D_CUTOFF_HZ			40.0f
 #define RATE_SETPOINT_MAX_AGE_US		16000
 
@@ -61,11 +75,14 @@ void RateControllerTask(void *argument){
 	AttitudeTopic_Subscribe(rateController.controllerTask, RATE_CONTROLLER_ID_TASK);
 
 	PID_Init(&rollRatePID,  RATE_PID_KP_ROLL,  RATE_PID_KI_ROLL,  RATE_PID_KD_ROLL,
-	         RATE_PID_INTEGRAL_LIMIT, RATE_PID_OUTPUT_LIMIT, RATE_PID_D_CUTOFF_HZ);
+	         RATE_PID_INTEGRAL_LIMIT(RATE_PID_I_MAX_ROLL_PITCH, RATE_PID_KI_ROLL),
+	         RATE_PID_OUTPUT_LIMIT, RATE_PID_D_CUTOFF_HZ);
 	PID_Init(&pitchRatePID, RATE_PID_KP_PITCH, RATE_PID_KI_PITCH, RATE_PID_KD_PITCH,
-	         RATE_PID_INTEGRAL_LIMIT, RATE_PID_OUTPUT_LIMIT, RATE_PID_D_CUTOFF_HZ);
+	         RATE_PID_INTEGRAL_LIMIT(RATE_PID_I_MAX_ROLL_PITCH, RATE_PID_KI_PITCH),
+	         RATE_PID_OUTPUT_LIMIT, RATE_PID_D_CUTOFF_HZ);
 	PID_Init(&yawRatePID,   RATE_PID_KP_YAW,   RATE_PID_KI_YAW,   RATE_PID_KD_YAW,
-	         RATE_PID_INTEGRAL_LIMIT, RATE_PID_OUTPUT_LIMIT, RATE_PID_D_CUTOFF_HZ);
+	         RATE_PID_INTEGRAL_LIMIT(RATE_PID_I_MAX_YAW, RATE_PID_KI_YAW),
+	         RATE_PID_OUTPUT_LIMIT_YAW, RATE_PID_D_CUTOFF_HZ);
 
 	Attitude_Data_t attitude = {0};
 	RateSetpoint_Data_t setpoint = {0};

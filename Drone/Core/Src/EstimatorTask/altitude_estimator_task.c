@@ -10,7 +10,10 @@
 
 #define ALT_EST_PERIOD_S            0.01f     /* run the observer on every 10 ms of samples */
 #define ALT_EST_GAP_MAX_S           0.05f     /* longer gap between samples: start the window over */
-#define ALT_EST_BARO_LOSS_CYCLES    50U       /* 0.5 s at 100 Hz without a fresh baro -> invalid */
+#define ALT_EST_BARO_LOSS_CYCLES    50U
+
+#define LIFT_BASE_TAU_S             0.5f      /* s, standing reading, learned while the motors do not fly */
+#define LIFT_LEAK_TAU_S             1.0f      /* s, forgets a small accelerometer error instead of adding it up */
 
 AltitudeEstimator_Handle_t altitudeEstimator;
 
@@ -34,6 +37,10 @@ void AltitudeEstimatorTask(void *argument){
     float    dtAcc        = 0.0f;
     float    accelUpAcc   = 0.0f;
 
+    float    liftBase     = 0.0f;   /* m/s^2, accelUp while standing */
+    uint8_t  liftBaseSet  = 0;
+    float    liftVz       = 0.0f;   /* m/s, accelerometer-only lift-off speed */
+
     while(1){
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
@@ -55,8 +62,6 @@ void AltitudeEstimatorTask(void *argument){
             continue;
         }
 
-        /* Integrate the mean acceleration over the window. Taking one 2 kHz sample
-         * per 10 ms aliases motor vibration straight into the vertical speed. */
         dtAcc      += sampleDt;
         accelUpAcc += attitude.accelUp * sampleDt;
         if(dtAcc < ALT_EST_PERIOD_S) continue;
@@ -65,6 +70,27 @@ void AltitudeEstimatorTask(void *argument){
         float accelUp = accelUpAcc / dtAcc;
         dtAcc      = 0.0f;
         accelUpAcc = 0.0f;
+
+        if(!Arm_MotorsAllowed()){
+            if(!liftBaseSet){
+                liftBase    = accelUp;
+                liftBaseSet = 1;
+            }
+            liftBase += (accelUp - liftBase) * dt / (LIFT_BASE_TAU_S + dt);
+            liftVz    = 0.0f;
+        }
+        else if(!Arm_IsAirborne()){
+            liftVz += (accelUp - liftBase) * dt;
+            
+            /* If the aircraft only vibrates on the ground without taking off, 
+            integration errors can accumulate over time and falsely indicate 
+            that it is flying. A leak continuously reduces the accumulated 
+            value toward zero, cancelling out mechanical vibration effects.*/
+            liftVz -= liftVz * dt / LIFT_LEAK_TAU_S;
+        }
+        else{
+            liftVz = 0.0f;
+        }
 
         uint8_t baroFresh = 0;
         if(BaroTopic_Copy(&baro, 0) == pdPASS && baro.timestamp_us != 0){
@@ -77,30 +103,37 @@ void AltitudeEstimatorTask(void *argument){
         if(baroFresh) baroLostCycles = 0;
         else if(baroLostCycles < ALT_EST_BARO_LOSS_CYCLES) baroLostCycles++;
 
-        if(!initialized){
-            if(!baroFresh) continue;
+        if(!initialized && baroFresh){
             z         = baro.altitude_m;
             vz        = 0.0f;
             accelBias = 0.0f;
             initialized = 1;
         }
-        float az = accelUp - accelBias;
 
-        if(baroFresh){
-            // observer error
-            // handle drift accelerometer
-            float err = baro.altitude_m - z;
+        if(initialized){
+            float az = accelUp - accelBias;
 
-            z         += (vz + ALT_EST_K1 * err) * dt;
-            vz        += (az + ALT_EST_K2 * err) * dt;
-            accelBias += (-ALT_EST_K3 * err) * dt;
+            if(baroFresh){
+                // observer error
+                // handle drift accelerometer
+                float err = baro.altitude_m - z;
+
+                z         += (vz + ALT_EST_K1 * err) * dt;
+                vz        += (az + ALT_EST_K2 * err) * dt;
+                accelBias += (-ALT_EST_K3 * err) * dt;
+            }
+            else{
+                z  += vz * dt;
+                vz += az * dt;
+            }
+
+            if(!Arm_IsAirborne()){
+                vz        = liftVz;
+                accelBias = liftBase;
+            }
 
             if(accelBias >  ALT_EST_ACCEL_BIAS_LIMIT) accelBias =  ALT_EST_ACCEL_BIAS_LIMIT;
             if(accelBias < -ALT_EST_ACCEL_BIAS_LIMIT) accelBias = -ALT_EST_ACCEL_BIAS_LIMIT;
-        }
-        else{
-            z  += vz * dt;
-            vz += az * dt;
         }
 
         Altitude_Data_t *alt = &altitudeEstimator.data;
@@ -108,6 +141,7 @@ void AltitudeEstimatorTask(void *argument){
         alt->verticalSpeed = vz;
         alt->accelUp       = accelUp;
         alt->accelBias     = accelBias;
+        alt->liftVz        = liftVz;
         alt->valid         = initialized && (baroLostCycles < ALT_EST_BARO_LOSS_CYCLES);
         alt->baroValid     = baroFresh;
         alt->dt            = dt;

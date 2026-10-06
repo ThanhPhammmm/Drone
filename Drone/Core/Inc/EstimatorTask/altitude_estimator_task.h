@@ -8,6 +8,7 @@
 #include "Const.h"
 #include "attitude_topic.h"
 #include "timebase.h"
+#include "arm.h"
 
 typedef struct{
     Altitude_Data_t data;
