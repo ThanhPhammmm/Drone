@@ -3,6 +3,10 @@
 
 #define MAG_MAX_AGE_US   20000
 
+#define MAHONY_KP_GROUND     1.0f
+#define MAHONY_KP_FLIGHT     0.2f
+#define MAHONY_KI            0.05f
+
 static Mahony_t mahony;
 AttitudeEstimator_Handle_t attitudeEstimator;
 
@@ -15,7 +19,7 @@ void AttitudeEstimatorTask(void *argument){
 	IMUTopic_Subscribe(attitudeEstimator.attitudeTask, ATTITUDE_ESTIMATOR_ID_TASK);
 
     BMI088_Data_t imu;
-    Mahony_Init(&mahony,1.0f,0.05f);
+    Mahony_Init(&mahony, MAHONY_KP_GROUND, MAHONY_KI);
 	uint8_t magWasUsed = 0;
 	
     while(1){
@@ -41,6 +45,7 @@ void AttitudeEstimatorTask(void *argument){
 		}
 		float magVec[3] = { mag.x, mag.y, mag.z };
 
+		mahony.kp = Arm_MotorsAllowed() ? MAHONY_KP_FLIGHT : MAHONY_KP_GROUND;
 		Mahony_Update(&mahony, &imu, magVec, magValid);
 
 		Attitude_Data_t *attitude = &attitudeEstimator.data;

@@ -6,20 +6,37 @@
 
 BMP388_Handle_t bmp388;
 
-static BMP388_Status_t BMP388_WriteReg(uint8_t reg, uint8_t val){
-    if(HAL_I2C_Mem_Write(&BARO_I2C, bmp388.addr, reg, I2C_MEMADD_SIZE_8BIT,
-                          &val, 1, BMP388_I2C_TIMEOUT_MS) != HAL_OK){
-        return BMP388_ERROR;
+static BMP388_Status_t BMP388_WaitDma(HAL_StatusTypeDef started){
+    if(started == HAL_OK){
+        TickType_t start = xTaskGetTickCount();
+        while(HAL_I2C_GetState(&BARO_I2C) != HAL_I2C_STATE_READY &&
+              (xTaskGetTickCount() - start) <= pdMS_TO_TICKS(BMP388_I2C_TIMEOUT_MS)){
+            vTaskDelay(1);
+        }
+        if(HAL_I2C_GetState(&BARO_I2C) == HAL_I2C_STATE_READY &&
+           HAL_I2C_GetError(&BARO_I2C) == HAL_I2C_ERROR_NONE){
+            return BMP388_OK;
+        }
     }
-    return BMP388_OK;
+    HAL_I2C_DeInit(&BARO_I2C);
+    HAL_I2C_Init(&BARO_I2C);
+    return BMP388_ERROR;
+}
+
+static BMP388_Status_t BMP388_WriteReg(uint8_t reg, uint8_t val){
+    return BMP388_WaitDma(HAL_I2C_Mem_Write_DMA(&BARO_I2C, bmp388.addr, reg, I2C_MEMADD_SIZE_8BIT,
+                                                &val, 1));
 }
 
 static BMP388_Status_t BMP388_ReadRegs(uint8_t reg, uint8_t *buf, uint16_t len){
-    if(HAL_I2C_Mem_Read(&BARO_I2C, bmp388.addr, reg, I2C_MEMADD_SIZE_8BIT,
-                         buf, len, BMP388_I2C_TIMEOUT_MS) != HAL_OK){
-        return BMP388_ERROR;
+    if(len == 1U){
+        uint8_t two[2];
+        if(BMP388_ReadRegs(reg, two, 2) != BMP388_OK) return BMP388_ERROR;
+        buf[0] = two[0];
+        return BMP388_OK;
     }
-    return BMP388_OK;
+    return BMP388_WaitDma(HAL_I2C_Mem_Read_DMA(&BARO_I2C, bmp388.addr, reg, I2C_MEMADD_SIZE_8BIT,
+                                               buf, len));
 }
 
 static BMP388_Status_t BMP388_ProbeAddress(void){

@@ -12,20 +12,37 @@
 
 QMC5883_Handle_t qmc5883;
 
-static QMC5883_Status_t QMC5883_WriteReg(uint8_t reg, uint8_t val){
-    if(HAL_I2C_Mem_Write(&MAG_I2C, QMC5883_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
-                          &val, 1, QMC5883_I2C_TIMEOUT_MS) != HAL_OK){
-        return QMC5883_ERROR;
+static QMC5883_Status_t QMC5883_WaitDma(HAL_StatusTypeDef started){
+    if(started == HAL_OK){
+        TickType_t start = xTaskGetTickCount();
+        while(HAL_I2C_GetState(&MAG_I2C) != HAL_I2C_STATE_READY &&
+              (xTaskGetTickCount() - start) <= pdMS_TO_TICKS(QMC5883_I2C_TIMEOUT_MS)){
+            vTaskDelay(1);
+        }
+        if(HAL_I2C_GetState(&MAG_I2C) == HAL_I2C_STATE_READY &&
+           HAL_I2C_GetError(&MAG_I2C) == HAL_I2C_ERROR_NONE){
+            return QMC5883_OK;
+        }
     }
-    return QMC5883_OK;
+    HAL_I2C_DeInit(&MAG_I2C);
+    HAL_I2C_Init(&MAG_I2C);
+    return QMC5883_ERROR;
+}
+
+static QMC5883_Status_t QMC5883_WriteReg(uint8_t reg, uint8_t val){
+    return QMC5883_WaitDma(HAL_I2C_Mem_Write_DMA(&MAG_I2C, QMC5883_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
+                                                 &val, 1));
 }
 
 static QMC5883_Status_t QMC5883_ReadRegs(uint8_t reg, uint8_t *buf, uint16_t len){
-    if(HAL_I2C_Mem_Read(&MAG_I2C, QMC5883_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
-                         buf, len, QMC5883_I2C_TIMEOUT_MS) != HAL_OK){
-        return QMC5883_ERROR;
+    if(len == 1U){
+        uint8_t two[2];
+        if(QMC5883_ReadRegs(reg, two, 2) != QMC5883_OK) return QMC5883_ERROR;
+        buf[0] = two[0];
+        return QMC5883_OK;
     }
-    return QMC5883_OK;
+    return QMC5883_WaitDma(HAL_I2C_Mem_Read_DMA(&MAG_I2C, QMC5883_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
+                                                buf, len));
 }
 
 QMC5883_Status_t QMC5883_Init(void){

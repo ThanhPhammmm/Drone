@@ -9,6 +9,7 @@ typedef struct{
     float verticalSpeed;    /* m/s */
     float accelUp;          /* m/s^2 */
     float accelBias;        /* m/s^2 */
+    float liftVz;           /* m/s up, accelerometer only: how fast it leaves the ground during the take-off, else 0 */
 
     uint8_t valid;
     uint8_t baroValid;
