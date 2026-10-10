@@ -56,6 +56,10 @@ void MotorOutput_Update(float roll, float pitch, float yaw, float throttle, Moto
 
     const float available = MOTOR_MAX - MOTOR_IDLE;
 
+    const uint8_t airMode = Arm_IsAirborne() && throttle > MOTOR_DESAT_MIN_THROTTLE;
+
+    float thr = clampf(throttle, MOTOR_IDLE, MOTOR_MAX);
+
     /* Roll/pitch first: they keep the aircraft upright. */
     float rp[MOTOR_COUNT];
     float lo = 0.0f, hi = 0.0f;
@@ -71,40 +75,67 @@ void MotorOutput_Update(float roll, float pitch, float yaw, float throttle, Moto
     float scale = 1.0f;
     if((hi - lo) > available){
         scale = available / (hi - lo);
-        lo *= scale;
-        hi *= scale;
-        if(sat) sat->rollPitchSaturated = 1;
     }
 
+    if(!airMode){
+        float h = hi * scale;
+        float l = lo * scale;
+        if(thr + h > MOTOR_MAX) thr = MOTOR_MAX - h;
+        if(thr + l < MOTOR_IDLE && l < 0.0f){
+            scale *= (thr - MOTOR_IDLE) / -l;
+        }
+    }
+
+    lo *= scale;
+    hi *= scale;
+    for(uint8_t i = 0; i < MOTOR_COUNT; i++) rp[i] *= scale;
+    if(sat && scale < 1.0f) sat->rollPitchSaturated = 1;
+
     /* Yaw only gets the room roll/pitch left, so a large yaw demand can never
-     * scale roll/pitch down. The yaw mix is +-1, so |yaw| <= headroom/2 cannot
-     * push the spread past `available`. */
-    float yawMax = 0.5f * (available - (hi - lo));
-    if(yaw > yawMax || yaw < -yawMax){
-        yaw = clampf(yaw, -yawMax, yawMax);
+     * scale roll/pitch down or push a diagonal pair onto the idle floor. */
+    float yawHi, yawLo;
+    if(airMode){
+        yawHi = 0.5f * (available - (hi - lo));
+        yawLo = -yawHi;
+    }
+    else{
+        yawHi =  available;
+        yawLo = -available;
+        for(uint8_t i = 0; i < MOTOR_COUNT; i++){
+            float k = mix[i][2];
+            if(k == 0.0f) continue;
+            float up   = MOTOR_MAX - (thr + rp[i]);
+            float down = (thr + rp[i]) - MOTOR_IDLE;
+            if(up   < 0.0f) up   = 0.0f;
+            if(down < 0.0f) down = 0.0f;
+            float a = (k > 0.0f) ? k : -k;
+            float roomPos = ((k > 0.0f) ? up : down) / a;
+            float roomNeg = ((k > 0.0f) ? down : up) / a;
+            if(roomPos < yawHi)  yawHi =  roomPos;
+            if(-roomNeg > yawLo) yawLo = -roomNeg;
+        }
+    }
+    if(yaw > yawHi || yaw < yawLo){
+        yaw = clampf(yaw, yawLo, yawHi);
         if(sat) sat->yawSaturated = 1;
     }
 
     float axis[MOTOR_COUNT];
     for(uint8_t i = 0; i < MOTOR_COUNT; i++){
-        axis[i] = rp[i] * scale + yaw * mix[i][2];
+        axis[i] = rp[i] + yaw * mix[i][2];
 
         if(i == 0 || axis[i] < lo) lo = axis[i];
         if(i == 0 || axis[i] > hi) hi = axis[i];
     }
 
-    /* Air-mode: lift the collective so a torque demand can still be met at low
-     * throttle. Only once airborne -- on the ground it lets the attitude loop
-     * raise one side of the frame and flip it over its own legs. */
-    float thrMin = (Arm_IsAirborne() && throttle > MOTOR_DESAT_MIN_THROTTLE) ? (MOTOR_IDLE - lo) : MOTOR_IDLE;
-    float thrMax = MOTOR_MAX - hi;
-
-    float thr = clampf(throttle, thrMin, thrMax);
+    if(airMode){
+        thr = clampf(throttle, MOTOR_IDLE - lo, MOTOR_MAX - hi);
+    }
 
     if(sat){
-    	if(throttle > thrMax) sat->throttleSaturatedHigh = 1;
-    	if(throttle < thrMin) sat->throttleSaturatedLow  = 1;
-	}
+        if(throttle > thr + 1e-4f) sat->throttleSaturatedHigh = 1;
+        if(throttle < thr - 1e-4f) sat->throttleSaturatedLow  = 1;
+    }
 
     for(uint8_t i = 0; i < MOTOR_COUNT; i++){
         float out = clampf(thr + axis[i], MOTOR_IDLE, MOTOR_MAX);

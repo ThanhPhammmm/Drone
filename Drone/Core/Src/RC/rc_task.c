@@ -10,15 +10,31 @@
 #define RC_FAILSAFE_THRUST_SCALE    0.90f   /* blind descent if no baro */
 
 #define RC_MAX_TILT_RAD             0.35f   /* ~20 deg at full stick */
+#define RC_HOLD_RELEASE_LOW         0.10f   /* ALT_HOLD waiting for a centred stick: this low = descend */
 #define RC_MAX_YAW_RATE             3.0f    /* rad/s */
 
 static RC_Data_t rc;
+
+static uint8_t prevHoldEngaged = 0;
+static uint8_t waitStickCentre = 0;
 
 static float RC_Norm(int16_t v){
     float f = (float)v / (float)RC_CHANNEL_MAX;
     if(f >  1.0f) f =  1.0f;
     if(f < -1.0f) f = -1.0f;
     return f;
+}
+
+static float RC_HoldThrottle(uint8_t holdMode, uint8_t linkOk, uint8_t *holdEngaged){
+    uint8_t engaged = holdMode && Arm_IsAirborne();
+    if(!engaged || !linkOk)   waitStickCentre = 0;
+    else if(!prevHoldEngaged) waitStickCentre = 1;
+    if(waitStickCentre && (FlightMode_ClimbRate(rc.throttle) == 0.0f || rc.throttle < RC_HOLD_RELEASE_LOW)){
+        waitStickCentre = 0;
+    }
+    prevHoldEngaged = engaged;
+    *holdEngaged    = engaged;
+    return waitStickCentre ? 0.5f : rc.throttle;
 }
 
 void RCTask(void *argument){
@@ -35,6 +51,10 @@ void RCTask(void *argument){
     uint8_t     tlm[32];
 
     float lastThrottle = 0.0f;
+    float cosTilt      = 0.0f;   /* not level until the estimate says so */
+
+    Altitude_Data_t altNow    = {0};
+    Thrust_Data_t   thrustNow = {0};
 
     while(1){
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(RC_TICK_MS));
@@ -69,12 +89,10 @@ void RCTask(void *argument){
         }
         else{
             rc.roll = rc.pitch = rc.yaw = 0.0f;
-            /* rc.throttle deliberately retains its last value -- the blind
-             * descent below needs it. */
         }
 
-        Altitude_Data_t altNow = {0};
-        uint8_t altValid = (AltitudeTopic_Copy(&altNow, 0) == pdPASS) && altNow.valid;
+        (void)AltitudeTopic_Copy(&altNow, 0);
+        uint8_t altValid = altNow.valid;
 
         /* Flight mode actually flown. On link loss: ALT_HOLD descent if the
          * altitude estimate is good, otherwise ANGLE with a blind thrust cut. */
@@ -84,8 +102,18 @@ void RCTask(void *argument){
         rc.mode = (uint8_t)mode;
         FlightMode_SetActive(mode);
 
-        Thrust_Data_t thrustNow = {0};
-        if(ThrustTopic_Copy(&thrustNow, 0) != pdPASS) thrustNow.thrust = 0.0f;
+        uint8_t      holdMode = (mode == FLIGHT_MODE_ALT_HOLD || mode == FLIGHT_MODE_POS_HOLD);
+        uint8_t      holdEngaged;
+        float        climbThrottle = RC_HoldThrottle(holdMode, linkOk, &holdEngaged);
+        FlightMode_t stickMode     = holdEngaged ? mode : FLIGHT_MODE_ANGLE;
+
+        (void)ThrustTopic_Copy(&thrustNow, 0);
+
+        Attitude_Data_t attNow;
+        if(AttitudeTopic_Copy(&attNow) == pdPASS &&
+           (attNow.q0 * attNow.q0 + attNow.q1 * attNow.q1 + attNow.q2 * attNow.q2 + attNow.q3 * attNow.q3) > 0.5f){
+            cosTilt = 1.0f - 2.0f * (attNow.q1 * attNow.q1 + attNow.q2 * attNow.q2);
+        }
 
         Arm_Input_t armIn;
         armIn.armSwitch      = (latest.flags & RC_FLAG_ARM) ? 1U : 0U;
@@ -93,16 +121,17 @@ void RCTask(void *argument){
         armIn.linkOk         = linkOk;
         armIn.linkLostMs     = (uint32_t)(age * portTICK_PERIOD_MS);
         armIn.throttleLow    = (rc.throttle < RC_ARM_THROTTLE_MAX);
-        /* take-off/landing come from the pilot's stick, not from the thrust the
-         * controller happens to output (in ALT_HOLD those are unrelated) */
-        armIn.takeoffRequest = linkOk && FlightMode_TakeoffRequested(mode, rc.throttle);
-        armIn.descendRequest = linkOk && FlightMode_DescendRequested(mode, rc.throttle);
+        armIn.takeoffRequest = linkOk && FlightMode_TakeoffRequested(stickMode, climbThrottle);
+        armIn.descendRequest = linkOk && FlightMode_DescendRequested(stickMode, climbThrottle);
         armIn.thrust         = thrustNow.thrust;
-        armIn.altitude       = altNow.altitude;
-        armIn.verticalSpeed  = altNow.verticalSpeed;
+        armIn.hoverThrust    = thrustNow.hoverThrust;
+        armIn.liftVz         = altNow.liftVz;
+        armIn.accelUp        = altNow.accelUp;
         armIn.altitudeValid  = altValid;
+        armIn.cosTilt        = cosTilt;
 
         Arm_Update(&armIn);
+        climbThrottle = RC_HoldThrottle(holdMode, linkOk, &holdEngaged);   /* AIRBORNE may have come just now */
 
         AttitudeSetpoint_Data_t attSp = {0};
         AltitudeSetpoint_Data_t altSp = {0};
@@ -119,9 +148,8 @@ void RCTask(void *argument){
                  * sticks (see flight_mode.c). Vertical axis is ALT_HOLD. */
                 /* fall through */
             case FLIGHT_MODE_ALT_HOLD:
-                /* stick about centre commands climb rate; centred = hold */
-                altSp.climbRate    = FlightMode_ClimbRate(rc.throttle);
-                altSp.manualThrust = rc.throttle;     /* used only if the estimate drops out */
+                altSp.climbRate    = holdEngaged ? FlightMode_ClimbRate(climbThrottle) : 0.0f;
+                altSp.manualThrust = rc.throttle;     /* the thrust until then, and if the estimate drops out */
                 break;
 
             case FLIGHT_MODE_ANGLE:
@@ -134,12 +162,6 @@ void RCTask(void *argument){
         else{
             /* Failsafe: level the aircraft, stop yawing, and descend. */
             attSp.roll = attSp.pitch = attSp.yawRate = 0.0f;
-
-            /* ALT_HOLD handles the descent when the estimate is good. If it is
-             * not, mode is ANGLE and manualThrust is flown directly, so bias it
-             * below the last known throttle for a blind sink. This is a hard
-             * landing, not a graceful one -- the disarm timeout in arm.c is the
-             * real backstop. */
             altSp.climbRate    = RC_FAILSAFE_DESCENT_MS;
             altSp.manualThrust = lastThrottle * RC_FAILSAFE_THRUST_SCALE;
         }

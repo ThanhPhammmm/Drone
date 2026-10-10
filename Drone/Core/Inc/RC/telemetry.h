@@ -11,6 +11,7 @@
 #include "flight_mode.h"
 #include "bmi088.h"
 #include "magbaro_task.h"
+#include "calibration.h"
 #include "imu_topic.h"
 #include "attitude_topic.h"
 #include "attitude_setpoint_topic.h"

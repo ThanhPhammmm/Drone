@@ -13,7 +13,8 @@ typedef struct{
     uint8_t  armState;          /* 0 DISARMED 1 ARMING 2 ARMED_GROUND 3 TAKEOFF 4 AIRBORNE 5 LANDING 6 FAILSAFE */
     uint8_t  mode;              /* 0 ANGLE 1 ALT_HOLD 2 POS_HOLD */
     uint8_t  imuCalibrated;
-    uint8_t  magBaroCalibrated;
+    uint8_t  baroCalibrated;
+    uint8_t  magCalibrated;
     uint8_t  altitudeValid;
 
     /* attitude loop */
@@ -26,6 +27,7 @@ typedef struct{
     /* outputs */
     uint16_t motor[4];          /* us: M1 FR, M2 RR, M3 RL, M4 FL */
     float    thrust;            /* 0..1 */
+    float    hoverThrust;       /* 0..1, measured in flight; 0 = not known yet */
     uint8_t  saturation;        /* 1 roll/pitch cut, 2 yaw cut, 4 throttle at max, 8 throttle at min */
 
     /* altitude */
@@ -39,7 +41,6 @@ typedef struct{
     float    vibration;         /* m/s^2 */
     uint16_t rateDtMaxUs;
     uint16_t rcLost;
-    uint16_t droneTimeMs;
 } Telemetry_t;
 
 extern Telemetry_t telemetry;
