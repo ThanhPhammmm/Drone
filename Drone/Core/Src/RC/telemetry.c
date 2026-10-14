@@ -17,12 +17,12 @@ static uint16_t TLM_U16(float v){
 	return (uint16_t)v;
 }
 
-static uint8_t TLM_State(uint8_t altValid){
+static uint8_t TLM_State(void){
 	uint8_t s = (uint8_t)Arm_GetState() & TLM_STATE_ARM_MASK;
 	s |= ((uint8_t)FlightMode_GetActive() << TLM_STATE_MODE_SHIFT) & TLM_STATE_MODE_MASK;
-	if(BMI088_IsCalibrated())  s |= TLM_STATE_IMU_CAL;
-	if(MagBaro_IsCalibrated()) s |= TLM_STATE_MAGBARO_CAL;
-	if(altValid)               s |= TLM_STATE_ALT_VALID;
+	if(Calib_Usable(CALIB_SENSOR_BMI088))  s |= TLM_STATE_IMU_CAL;
+	if(Calib_Usable(CALIB_SENSOR_BMP388))  s |= TLM_STATE_BARO_CAL;
+	if(Calib_Usable(CALIB_SENSOR_QMC5883)) s |= TLM_STATE_MAG_CAL;
 	return s;
 }
 
@@ -62,7 +62,7 @@ static uint8_t TLM_BuildAttitude(uint8_t *buf, uint8_t rcSeq, uint8_t state){
 }
 
 static uint8_t TLM_BuildOutput(uint8_t *buf, uint8_t rcSeq, uint8_t state, uint16_t rcLost,
-                               const Altitude_Data_t *alt){
+                               const Altitude_Data_t *alt, uint8_t altValid){
 	AltitudeSetpoint_Data_t altSp = {0};
 	Baro_Data_t   baro = {0};
 	Thrust_Data_t thr  = {0};
@@ -97,11 +97,13 @@ static uint8_t TLM_BuildOutput(uint8_t *buf, uint8_t rcSeq, uint8_t state, uint1
 	f.accelUp      = TLM_S16(alt->accelUp * 100.0f);
 	f.rateDtMaxUs  = TLM_U16((float)RateController_TakeMaxStepUs());
 	f.rcLost       = rcLost;
-	f.time_ms      = (uint16_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+	f.hoverThrust  = TLM_U16(thr.hoverThrust * 10000.0f);
 	f.sat          = (sat.rollPitchSaturated    ? TLM_SAT_ROLL_PITCH : 0) |
 	                 (sat.yawSaturated          ? TLM_SAT_YAW        : 0) |
 	                 (sat.throttleSaturatedHigh ? TLM_SAT_THR_HIGH   : 0) |
-	                 (sat.throttleSaturatedLow  ? TLM_SAT_THR_LOW    : 0);
+	                 (sat.throttleSaturatedLow  ? TLM_SAT_THR_LOW    : 0) |
+	                 (Arm_Tumbled()             ? TLM_SAT_TUMBLE     : 0) |
+	                 (altValid                  ? TLM_SAT_ALT_VALID  : 0);
 	f.vibration    = (uint8_t)((vib > 255.0f) ? 255.0f : vib + 0.5f);
 
 	memcpy(buf, &f, sizeof(f));
@@ -113,7 +115,7 @@ uint8_t Telemetry_Build(uint8_t *buf, uint8_t rcSeq, uint16_t rcLost){
 
 	Altitude_Data_t alt = {0};
 	uint8_t altValid = (AltitudeTopic_Copy(&alt, 0) == pdPASS) && alt.valid;
-	uint8_t state    = TLM_State(altValid);
+	uint8_t state    = TLM_State();
 
 	uint8_t len;
 	if(next == TLM_FRAME_ATTITUDE){
@@ -121,7 +123,7 @@ uint8_t Telemetry_Build(uint8_t *buf, uint8_t rcSeq, uint16_t rcLost){
 		next = TLM_FRAME_OUTPUT;
 	}
 	else{
-		len  = TLM_BuildOutput(buf, rcSeq, state, rcLost, &alt);
+		len  = TLM_BuildOutput(buf, rcSeq, state, rcLost, &alt, altValid);
 		next = TLM_FRAME_ATTITUDE;
 	}
 	return len;

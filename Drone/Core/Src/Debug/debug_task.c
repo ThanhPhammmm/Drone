@@ -181,8 +181,8 @@ static void Dbg_Flight(void){
 	    asp.roll * RAD2DEG, asp.pitch * RAD2DEG, asp.yawRate * RAD2DEG,
 	    rsp.rollRate * RAD2DEG, rsp.pitchRate * RAD2DEG, rsp.yawRate * RAD2DEG);
 
-	Dbg("ctrl   torque %+.3f %+.3f %+.3f | thrust %.3f hold %u | climb sp %+.2f m/s manual %.2f\r\n",
-	    torque[0], torque[1], torque[2], thr.thrust, thr.holdActive,
+	Dbg("ctrl   torque %+.3f %+.3f %+.3f | thrust %.3f hover %.3f hold %u | climb sp %+.2f m/s manual %.2f\r\n",
+	    torque[0], torque[1], torque[2], thr.thrust, thr.hoverThrust, thr.holdActive,
 	    altSp.climbRate, altSp.manualThrust);
 
 	Dbg("motor  us %4.0f %4.0f %4.0f %4.0f (M1 FR, M2 RR, M3 RL, M4 FL)\r\n",
@@ -191,8 +191,8 @@ static void Dbg_Flight(void){
 	Dbg("rc     roll %+.2f pitch %+.2f yaw %+.2f thr %.2f\r\n",
 	    rc.roll, rc.pitch, rc.yaw, rc.throttle);
 
-	Dbg("alt    z %+7.2f m vz %+6.2f m/s accUp %+6.2f bias %+5.2f valid %u | baro %.1f Pa %.1f C %+7.2f m\r\n",
-	    alt.altitude, alt.verticalSpeed, alt.accelUp, alt.accelBias, alt.valid,
+	Dbg("alt    z %+7.2f m vz %+6.2f m/s accUp %+6.2f bias %+5.2f valid %u | lift-off speed %+5.2f m/s | baro %.1f Pa %.1f C %+7.2f m\r\n",
+	    alt.altitude, alt.verticalSpeed, alt.accelUp, alt.accelBias, alt.valid, alt.liftVz,
 	    bmp388.pressure_pa, bmp388.temperature_c, bmp388.altitude_m);
 
 	/* heading only meaningful with the drone level and the compass calibrated */
@@ -221,6 +221,12 @@ void DebugTask(void *argument){
 		Dbg("\r\n---- t=%.1f s | arm=%s mode=%s link=%u\r\n",
 		    (float)xTaskGetTickCount() * (float)portTICK_PERIOD_MS * 0.001f,
 		    ArmName(Arm_GetState()), ModeName(rc.mode), rc.linkOk);
+		if(Arm_Tumbled() && Arm_GetState() == DISARMED){
+			Dbg("!!!! TUMBLE CUT-OFF: tilt passed 60 deg in flight, motors stopped. Before flying again\r\n"
+			    "     check motor order/direction (MOTOR_TEST_MODE), props, and that roll/pitch below\r\n"
+			    "     follow the frame (tilt right = roll +, nose up = pitch +). Cycle the switch to re-arm.\r\n");
+		}
+		
 		Dbg_CalibState();
 		uint8_t added = Dbg_CalibResults(shown);
 		Dbg_Flight();

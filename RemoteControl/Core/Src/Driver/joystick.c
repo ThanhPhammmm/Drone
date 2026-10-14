@@ -11,7 +11,7 @@
 #define JOY_CENTER_SAMPLES      32
 #define JOY_CENTER_SAMPLE_MS    5
 
-#define JOY_DEADBAND            40.0f       /* raw counts around centre that read 0 (~2% of travel) */
+#define JOY_DEADBAND            100.0f       /* raw counts around centre that read 0 (~2% of travel) */
 #define JOY_DEFAULT_HALF_TRAVEL 1400.0f     /* raw counts for full deflection until the stick has gone further */
 
 #define JOY_TRIM_WINDOW         (2.0f * JOY_DEADBAND)
@@ -20,7 +20,7 @@
 #define JOY_TRIM_HOLD_MS        1000U       /* still this long before the centre starts to follow */
 #define JOY_TRIM_TAU_MS         2000.0f     /* time constant of the centre following a resting stick */
 
-#define JOY_THR_END_DEADBAND    40.0f       /* raw counts at each throttle end that read exactly 0 / 1000 */
+#define JOY_THR_END_DEADBAND    100.0f       /* raw counts at each throttle end that read exactly 0 / 1000 */
 
 typedef struct{
     uint8_t  ch;
@@ -38,6 +38,7 @@ static JOY_Axis_t axisPitch = { .ch = JOY_CH_PITCH };
 static JOY_Axis_t axisYaw   = { .ch = JOY_CH_YAW   };
 
 static TickType_t lastReadTick;
+static volatile uint16_t throttleRaw;       /* last averaged ADC count, for the stick check */
 
 static float JOY_Average(uint8_t ch){
     uint32_t acc = 0;
@@ -105,12 +106,17 @@ static int16_t JOY_AxisRead(JOY_Axis_t *a, uint32_t dtMs){
 
 static uint16_t JOY_ThrottleRead(void){
     float raw  = JOY_Average(JOY_CH_THROTTLE);
+    throttleRaw = (uint16_t)raw;
     float span = (float)ADC_RESOLUTION_MAX - 2.0f * JOY_THR_END_DEADBAND;
 
     float v = (raw - JOY_THR_END_DEADBAND) / span * (float)RC_THROTTLE_MAX;
     if(v < 0.0f)                    v = 0.0f;
     if(v > (float)RC_THROTTLE_MAX)  v = (float)RC_THROTTLE_MAX;
     return (uint16_t)JOY_Round(v);
+}
+
+uint16_t JOY_ThrottleRaw(void){
+    return throttleRaw;
 }
 
 void JOY_DMA_Callback(ADC_HandleTypeDef *hadc){

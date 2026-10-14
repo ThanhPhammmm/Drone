@@ -1,8 +1,8 @@
 #include "flight_mode.h"
 #include "rc_protocol.h"
 
-#define FM_ANGLE_TAKEOFF_THROTTLE	0.20f	/* ANGLE: stick above this leaves the ground */
-#define FM_ANGLE_DESCEND_THROTTLE	0.15f	/* ANGLE: stick below this = landing / abort take-off */
+#define FM_ANGLE_TAKEOFF_THROTTLE	0.08f	/* ANGLE: stick above this = take-off begins */
+#define FM_ANGLE_DESCEND_THROTTLE	0.05f	/* ANGLE: stick below this = landing / abort take-off */
 
 #define FM_ALT_HOLD_DEADBAND		0.10f	/* fraction of the +-1 range around centre that means "hold" */
 #define FM_MAX_CLIMB_RATE			2.0f	/* m/s at full stick deflection */

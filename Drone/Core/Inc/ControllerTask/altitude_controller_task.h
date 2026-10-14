@@ -19,6 +19,7 @@ typedef struct{
 
     float holdTarget;       /* m, commanded altitude */
     float vzSetpoint;       /* m/s */
+    float hoverThrust;      /* thrust (made vertical) that hovers, measured on the way up */
 } AltitudeController_Handle_t;
 
 extern AltitudeController_Handle_t altitudeController;

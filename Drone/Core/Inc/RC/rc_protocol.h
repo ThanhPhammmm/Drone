@@ -36,15 +36,18 @@ typedef struct __attribute__((packed)){
 #define TLM_STATE_ARM_MASK      0x07    /* arm_state_t: 0 DISARMED .. 6 FAILSAFE */
 #define TLM_STATE_MODE_SHIFT    3
 #define TLM_STATE_MODE_MASK     0x18    /* flight mode in force: 0 ANGLE, 1 ALT_HOLD, 2 POS_HOLD */
+/* calibration flags = state >> 5: 1 IMU, 2 baro, 4 compass (7 = all calibrated) */
 #define TLM_STATE_IMU_CAL       0x20    /* BMI088 calibrated */
-#define TLM_STATE_MAGBARO_CAL   0x40    /* QMC5883 + BMP388 calibrated */
-#define TLM_STATE_ALT_VALID     0x80    /* altitude estimate valid */
+#define TLM_STATE_BARO_CAL      0x40    /* BMP388 ground reference taken, baro data flowing */
+#define TLM_STATE_MAG_CAL       0x80    /* QMC5883 calibrated (not needed to fly ANGLE / ALT_HOLD) */
 
 /* sat byte: what the mixer had to cut on the last rate-loop step */
 #define TLM_SAT_ROLL_PITCH      0x01
 #define TLM_SAT_YAW             0x02
 #define TLM_SAT_THR_HIGH        0x04
 #define TLM_SAT_THR_LOW         0x08
+#define TLM_SAT_TUMBLE          0x10    /* not the mixer: the last disarm was the tumble cut-off */
+#define TLM_SAT_ALT_VALID       0x20    /* not the mixer: altitude estimate valid (output frame only) */
 
 typedef struct __attribute__((packed)){
     uint8_t  magic;
@@ -72,7 +75,7 @@ typedef struct __attribute__((packed)){
     int16_t  accelUp;           /* vertical acceleration, cm/s^2 */
     uint16_t rateDtMaxUs;       /* longest rate-loop step since the previous frame */
     uint16_t rcLost;            /* RC packets missed so far (seq gaps) */
-    uint16_t time_ms;           /* drone clock, wraps every 65.5 s */
+    uint16_t hoverThrust;       /* hover thrust measured in flight, 1e-4; 0 = not known yet */
     uint8_t  sat;               /* TLM_SAT_* */
     uint8_t  vibration;         /* | |raw accel| - 1 g | at the sample, 0.1 m/s^2 */
 } TLM_Output_t;                 /* 32 bytes */
