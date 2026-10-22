@@ -24,6 +24,7 @@ FlightMode_t FlightMode_Resolve(uint8_t requested, uint8_t altitudeValid){
 	}
 }
 
+/* 0.5f +- 0.1f is an adc value that is read when holding joystick in center */
 float FlightMode_ClimbRate(float throttle){
 	float t = (throttle - 0.5f) * 2.0f;		/* -1..+1 around centre */
 

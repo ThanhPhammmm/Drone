@@ -8,7 +8,7 @@
 #include <string.h>
 
 #define TX_PERIOD_MS           20    /* 50Hz, matches the drone's RC_TICK_MS */
-#define NRF24_SEND_TIMEOUT_MS  15    /* must leave room inside TX_PERIOD_MS */
+#define NRF24_SEND_TIMEOUT_MS  16    /* 6 tries x ~2.3 ms = ~14 ms; must leave room inside TX_PERIOD_MS */
 
 static SemaphoreHandle_t statusMutex;
 static RCTx_Status_t     status;

@@ -11,13 +11,13 @@
  * Stop raising P at the first sign of buzz and go back two steps.
  * ========================================================== */
 
-#define RATE_PID_KP_ROLL		0.050f
-#define RATE_PID_KI_ROLL		0.150f
-#define RATE_PID_KD_ROLL		0.00075f
+#define RATE_PID_KP_ROLL		0.0400f
+#define RATE_PID_KI_ROLL		0.0100f
+#define RATE_PID_KD_ROLL		0.00010f
 
-#define RATE_PID_KP_PITCH 		0.050f
-#define RATE_PID_KI_PITCH 		0.150f
-#define RATE_PID_KD_PITCH 		0.00075f
+#define RATE_PID_KP_PITCH		0.0400f
+#define RATE_PID_KI_PITCH		0.0100f
+#define RATE_PID_KD_PITCH		0.00010f
 
 #define RATE_PID_KP_YAW			0.30f
 #define RATE_PID_KI_YAW   		0.10f
@@ -118,12 +118,14 @@ void RateControllerTask(void *argument){
 			setpoint.yawRate   = 0.0f;
 		}
 
+#if BALANCE_TEST == 0
 		/* Integrators only run once off the ground. While the frame is pinned by
 		 * the ground the rate error can never be removed, the I-term winds up and
 		 * is released as a kick at lift-off. */
 		if(!Arm_IsAirborne()){
 			RateController_ResetIntegrators();
 		}
+#endif
 
 		rateController.rollTorqueOutput  = PID_Update(&rollRatePID,  setpoint.rollRate,  attitude.rollRate,  dt);
 		rateController.pitchTorqueOutput = PID_Update(&pitchRatePID, setpoint.pitchRate, attitude.pitchRate, dt);

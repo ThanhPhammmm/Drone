@@ -20,10 +20,9 @@
 #define JOY_TRIM_HOLD_MS        1000U       /* still this long before the centre starts to follow */
 #define JOY_TRIM_TAU_MS         2000.0f     /* time constant of the centre following a resting stick */
 
-#define JOY_THR_END_DEADBAND    100.0f       /* raw counts at each throttle end that read exactly 0 / 1000 */
-
 typedef struct{
     uint8_t  ch;
+    uint8_t  fixedCenter;   /* 1: keep the power-up centre, no slow trimming */
     float    center;
     float    lo;            /* lowest raw value this stick has reached */
     float    hi;            /* highest raw value this stick has reached */
@@ -36,6 +35,7 @@ static volatile uint16_t adcRing[JOY_SCANS * JOY_NUM_CHANNELS];
 static JOY_Axis_t axisRoll  = { .ch = JOY_CH_ROLL  };
 static JOY_Axis_t axisPitch = { .ch = JOY_CH_PITCH };
 static JOY_Axis_t axisYaw   = { .ch = JOY_CH_YAW   };
+static JOY_Axis_t axisThrottle = { .ch = JOY_CH_THROTTLE, .fixedCenter = 1 };
 
 static TickType_t lastReadTick;
 static volatile uint16_t throttleRaw;       /* last averaged ADC count, for the stick check */
@@ -72,7 +72,7 @@ static int16_t JOY_AxisRead(JOY_Axis_t *a, uint32_t dtMs){
 
     a->smooth += (raw - a->smooth) * ((float)dtMs / (JOY_TRIM_SMOOTH_MS + (float)dtMs));
 
-    if(fabsf(off) < JOY_TRIM_WINDOW && fabsf(raw - a->smooth) < JOY_TRIM_STILL){
+    if(!a->fixedCenter && fabsf(off) < JOY_TRIM_WINDOW && fabsf(raw - a->smooth) < JOY_TRIM_STILL){
         if(a->stillMs < JOY_TRIM_HOLD_MS){
             a->stillMs += dtMs;
         }
@@ -104,15 +104,15 @@ static int16_t JOY_AxisRead(JOY_Axis_t *a, uint32_t dtMs){
     return JOY_Round(v);
 }
 
-static uint16_t JOY_ThrottleRead(void){
-    float raw  = JOY_Average(JOY_CH_THROTTLE);
-    throttleRaw = (uint16_t)raw;
-    float span = (float)ADC_RESOLUTION_MAX - 2.0f * JOY_THR_END_DEADBAND;
+static uint16_t JOY_ThrottleRead(uint32_t dtMs){
+    throttleRaw = (uint16_t)JOY_Average(JOY_CH_THROTTLE);
 
-    float v = (raw - JOY_THR_END_DEADBAND) / span * (float)RC_THROTTLE_MAX;
-    if(v < 0.0f)                    v = 0.0f;
-    if(v > (float)RC_THROTTLE_MAX)  v = (float)RC_THROTTLE_MAX;
-    return (uint16_t)JOY_Round(v);
+    /* -1000..+1000 around the centre -> 0..1000, released = exactly 500 */
+    int32_t a = JOY_AxisRead(&axisThrottle, dtMs);
+    int32_t v = (a + RC_CHANNEL_MAX) * RC_THROTTLE_MAX / (2 * RC_CHANNEL_MAX);
+    if(v < 0)               v = 0;
+    if(v > RC_THROTTLE_MAX) v = RC_THROTTLE_MAX;
+    return (uint16_t)v;
 }
 
 uint16_t JOY_ThrottleRaw(void){
@@ -128,18 +128,20 @@ void JOY_Init(void){
     HAL_ADC_Start_DMA(&JOY_ADC, (uint32_t *)adcRing, JOY_SCANS * JOY_NUM_CHANNELS);
     vTaskDelay(pdMS_TO_TICKS(JOY_CENTER_SETTLE_MS));
 
-    /* Sticks must be released at power-up. Throttle has no centre: it is an
-     * absolute 0..max stick, not a centred one. */
-    float roll = 0.0f, pitch = 0.0f, yaw = 0.0f;
+    /* All four sticks must be released at power-up: their centres are
+     * measured here, the throttle's too. */
+    float roll = 0.0f, pitch = 0.0f, yaw = 0.0f, throttle = 0.0f;
     for(uint8_t i = 0; i < JOY_CENTER_SAMPLES; i++){
-        roll  += JOY_Average(JOY_CH_ROLL);
-        pitch += JOY_Average(JOY_CH_PITCH);
-        yaw   += JOY_Average(JOY_CH_YAW);
+        roll     += JOY_Average(JOY_CH_ROLL);
+        pitch    += JOY_Average(JOY_CH_PITCH);
+        yaw      += JOY_Average(JOY_CH_YAW);
+        throttle += JOY_Average(JOY_CH_THROTTLE);
         vTaskDelay(pdMS_TO_TICKS(JOY_CENTER_SAMPLE_MS));
     }
-    JOY_AxisInit(&axisRoll,  roll  / (float)JOY_CENTER_SAMPLES);
-    JOY_AxisInit(&axisPitch, pitch / (float)JOY_CENTER_SAMPLES);
-    JOY_AxisInit(&axisYaw,   yaw   / (float)JOY_CENTER_SAMPLES);
+    JOY_AxisInit(&axisRoll,     roll     / (float)JOY_CENTER_SAMPLES);
+    JOY_AxisInit(&axisPitch,    pitch    / (float)JOY_CENTER_SAMPLES);
+    JOY_AxisInit(&axisYaw,      yaw      / (float)JOY_CENTER_SAMPLES);
+    JOY_AxisInit(&axisThrottle, throttle / (float)JOY_CENTER_SAMPLES);
 
     lastReadTick = xTaskGetTickCount();
 }
@@ -153,7 +155,7 @@ void JOY_Read(RC_Packet_t *pkt){
     pkt->roll     = -JOY_AxisRead(&axisRoll,  dtMs);
     pkt->pitch    = -JOY_AxisRead(&axisPitch, dtMs);
     pkt->yaw      = -JOY_AxisRead(&axisYaw,   dtMs);
-    pkt->throttle = JOY_ThrottleRead();
+    pkt->throttle = JOY_ThrottleRead(dtMs);
 
     /* Switch closed to GND (pin reads LOW) = armed. */
     pkt->flags = ((HAL_GPIO_ReadPin(ARM_SW_PORT, ARM_SW_PIN) == GPIO_PIN_RESET) ? RC_FLAG_ARM : 0);
