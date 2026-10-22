@@ -4,10 +4,10 @@ extern BMI088_Handle_t bmi088;
 extern volatile uint32_t gyro_dt;
 
 SemaphoreHandle_t imuDmaSem;
-#define GYRO_LPF_CUTOFF_HZ				90.0f   /* 80-100Hz */
-#define GYRO_SAMPLE_RATE_HZ				1000.0f
+#define GYRO_LPF_CUTOFF_HZ              80.0f   /* 80-100Hz */
+#define GYRO_SAMPLE_RATE_HZ             1000.0f
 #define ACCEL_SAMPLE_RATE_HZ            800.0f
-#define ACCEL_LPF_CUTOFF_HZ				30.0f	/* 20-50Hz	*/
+#define ACCEL_LPF_CUTOFF_HZ             30.0f	/* 20-50Hz	*/
 
 static BaseType_t  IMU_Signal_Init(void) {
     imuDmaSem = xSemaphoreCreateBinary();

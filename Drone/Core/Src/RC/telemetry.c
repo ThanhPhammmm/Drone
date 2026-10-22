@@ -1,7 +1,7 @@
 #include "telemetry.h"
 
-#define TLM_RAD2DEG             57.29578f
-#define TLM_ACCEL_G_PER_LSB     (12.0f / 32768.0f)
+#define TLM_RAD2DEG 			57.29578f
+#define TLM_ACCEL_G_PER_LSB		(12.0f / 32768.0f)
 
 static int16_t TLM_S16(float v){
 	v = (v >= 0.0f) ? v + 0.5f : v - 0.5f;

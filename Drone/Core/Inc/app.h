@@ -14,15 +14,16 @@
 #include "altitude_setpoint_topic.h"
 #include "actuator.h"
 
-#define TASK_PRIO_IMU				6
-#define TASK_PRIO_ATT_ESTIMATOR		5
+#define TASK_PRIO_IMU				7
+#define TASK_PRIO_ATT_ESTIMATOR		6
+#define TASK_PRIO_ATT_CTRL			5
 #define TASK_PRIO_RATE				4
-#define TASK_PRIO_ATT_CTRL			3
 
-#define TASK_PRIO_ALT_ESTIMATOR		3
-#define TASK_PRIO_ALT_CTRL			3
+#define TASK_PRIO_MAGBARO			6
+#define TASK_PRIO_ALT_ESTIMATOR		5
+#define TASK_PRIO_ALT_CTRL			4
+
 #define TASK_PRIO_RC				3
-#define TASK_PRIO_MAGBARO			2
 
 #define TASK_PRIO_MAG				1
 #define TASK_PRIO_DEBUG				1

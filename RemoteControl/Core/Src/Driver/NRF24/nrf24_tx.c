@@ -148,7 +148,7 @@ NRF24_Status_t NRF24_TX_Init(void){
     NRF24_WriteReg(NRF24_REG_EN_AA,      0x01);   /* auto-ack on pipe 0 */
     NRF24_WriteReg(NRF24_REG_EN_RXADDR,  0x01);   /* pipe 0 used to receive the ACK */
     NRF24_WriteReg(NRF24_REG_SETUP_AW,   0x03);   /* 5-byte address */
-    NRF24_WriteReg(NRF24_REG_SETUP_RETR, 0x54);   /* 1500us delay, 4 retries */
+    NRF24_WriteReg(NRF24_REG_SETUP_RETR, 0x55);   /* 1500us delay (min. for a 32-byte ACK at 250 kbps), 5 retries */
     NRF24_WriteReg(NRF24_REG_RF_SETUP,   NRF24_RF_DR_250K | NRF24_RF_PWR_0DBM);
     if(NRF24_EnableAckPayload() != NRF24_OK){
         return NRF24_NOT_PRESENT;
@@ -180,26 +180,33 @@ NRF24_Status_t NRF24_TX_Send(const RC_Packet_t *pkt, uint32_t timeoutMs, uint8_t
     memcpy(&tx[1], pkt, sizeof(RC_Packet_t));
 
     if(!NRF24_Transfer(tx, rx, sizeof(tx))) return NRF24_ERROR;
+
+    /* CE stays high until the radio is done. A pulse made with vTaskDelay(1)
+     * ends at the next tick, which can be under the 10 us the radio needs to
+     * start sending, and then the packet never goes out. */
     NRF24_CE(GPIO_PIN_SET);
-    vTaskDelay(pdMS_TO_TICKS(1));
-    NRF24_CE(GPIO_PIN_RESET);
     TickType_t start = xTaskGetTickCount();
-    while((xTaskGetTickCount() - start) < pdMS_TO_TICKS(timeoutMs)){
+    while(1){
         uint8_t status = NRF24_ReadReg(NRF24_REG_STATUS);
 
         if(status & NRF24_STATUS_TX_DS){
+            NRF24_CE(GPIO_PIN_RESET);
             NRF24_WriteReg(NRF24_REG_STATUS, NRF24_STATUS_TX_DS);
             NRF24_ReadAckPayload(ack, ackLen);
             return NRF24_OK;
         }
         if(status & NRF24_STATUS_MAX_RT){
-            NRF24_WriteReg(NRF24_REG_STATUS, NRF24_STATUS_MAX_RT);
+            /* CE low before MAX_RT is cleared, or the payload still in the FIFO goes out again */
+            NRF24_CE(GPIO_PIN_RESET);
             NRF24_Command(NRF24_CMD_FLUSH_TX);
+            NRF24_WriteReg(NRF24_REG_STATUS, NRF24_STATUS_MAX_RT);
             return NRF24_ERROR;    /* drone out of range / powered off */
         }
+        if((xTaskGetTickCount() - start) >= pdMS_TO_TICKS(timeoutMs)) break;
         vTaskDelay(pdMS_TO_TICKS(1));
     }
 
+    NRF24_CE(GPIO_PIN_RESET);
     NRF24_Command(NRF24_CMD_FLUSH_TX);
     return NRF24_TIMEOUT;
 }

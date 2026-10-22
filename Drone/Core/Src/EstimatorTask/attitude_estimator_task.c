@@ -1,11 +1,11 @@
 #include "attitude_topic.h"
 #include "debug.h"
 
-#define MAG_MAX_AGE_US   20000
+#define MAG_MAX_AGE_US		20000
 
-#define MAHONY_KP_GROUND     1.0f
-#define MAHONY_KP_FLIGHT     0.2f
-#define MAHONY_KI            0.05f
+#define MAHONY_KP_GROUND	1.0f
+#define MAHONY_KP_FLIGHT	0.2f
+#define MAHONY_KI			0.05f
 
 static Mahony_t mahony;
 AttitudeEstimator_Handle_t attitudeEstimator;
@@ -75,6 +75,7 @@ void AttitudeEstimatorTask(void *argument){
 		float q3 = attitude->q3;
 
 		// altitude accelerometer calculation
+		// DCM(Direction Cosine Matrix)
         float rx = 2.0f * (q1*q3 - q0*q2);
         float ry = 2.0f * (q0*q1 + q2*q3);
         float rz = q0*q0 - q1*q1 - q2*q2 + q3*q3;

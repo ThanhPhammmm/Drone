@@ -34,7 +34,7 @@ static float RC_HoldThrottle(uint8_t holdMode, uint8_t linkOk, uint8_t *holdEnga
     }
     prevHoldEngaged = engaged;
     *holdEngaged    = engaged;
-    return waitStickCentre ? 0.5f : rc.throttle;
+    return waitStickCentre ? 0.5f : rc.throttle;  /* 0.5f(center stick) is a pretended value for being stable in the air */
 }
 
 void RCTask(void *argument){
@@ -104,7 +104,7 @@ void RCTask(void *argument){
 
         uint8_t      holdMode = (mode == FLIGHT_MODE_ALT_HOLD || mode == FLIGHT_MODE_POS_HOLD);
         uint8_t      holdEngaged;
-        float        climbThrottle = RC_HoldThrottle(holdMode, linkOk, &holdEngaged);
+        float        climbStickThrottle = RC_HoldThrottle(holdMode, linkOk, &holdEngaged);
         FlightMode_t stickMode     = holdEngaged ? mode : FLIGHT_MODE_ANGLE;
 
         (void)ThrustTopic_Copy(&thrustNow, 0);
@@ -121,8 +121,8 @@ void RCTask(void *argument){
         armIn.linkOk         = linkOk;
         armIn.linkLostMs     = (uint32_t)(age * portTICK_PERIOD_MS);
         armIn.throttleLow    = (rc.throttle < RC_ARM_THROTTLE_MAX);
-        armIn.takeoffRequest = linkOk && FlightMode_TakeoffRequested(stickMode, climbThrottle);
-        armIn.descendRequest = linkOk && FlightMode_DescendRequested(stickMode, climbThrottle);
+        armIn.takeoffRequest = linkOk && FlightMode_TakeoffRequested(stickMode, climbStickThrottle);
+        armIn.descendRequest = linkOk && FlightMode_DescendRequested(stickMode, climbStickThrottle);
         armIn.thrust         = thrustNow.thrust;
         armIn.hoverThrust    = thrustNow.hoverThrust;
         armIn.liftVz         = altNow.liftVz;
@@ -131,7 +131,7 @@ void RCTask(void *argument){
         armIn.cosTilt        = cosTilt;
 
         Arm_Update(&armIn);
-        climbThrottle = RC_HoldThrottle(holdMode, linkOk, &holdEngaged);   /* AIRBORNE may have come just now */
+        climbStickThrottle = RC_HoldThrottle(holdMode, linkOk, &holdEngaged);   /* AIRBORNE may have come just now */
 
         AttitudeSetpoint_Data_t attSp = {0};
         AltitudeSetpoint_Data_t altSp = {0};
@@ -148,7 +148,7 @@ void RCTask(void *argument){
                  * sticks (see flight_mode.c). Vertical axis is ALT_HOLD. */
                 /* fall through */
             case FLIGHT_MODE_ALT_HOLD:
-                altSp.climbRate    = holdEngaged ? FlightMode_ClimbRate(climbThrottle) : 0.0f;
+                altSp.climbRate    = holdEngaged ? FlightMode_ClimbRate(climbStickThrottle) : 0.0f;
                 altSp.manualThrust = rc.throttle;     /* the thrust until then, and if the estimate drops out */
                 break;
 

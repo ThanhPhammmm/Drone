@@ -7,8 +7,8 @@
  * Z: when flatting, it is always approximately 30 to 40
  */
 
-#define MAG_I2C						hi2c2
-#define QMC5883_I2C_TIMEOUT_MS		10
+#define MAG_I2C                     hi2c2
+#define QMC5883_I2C_TIMEOUT_MS      10
 
 QMC5883_Handle_t qmc5883;
 
@@ -59,7 +59,7 @@ QMC5883_Status_t QMC5883_Init(void){
     uint8_t ctrl2 = QMC5883_RNG_8G | QMC5883_SETRESET_ON;
     if(QMC5883_WriteReg(QMC5883_REG_CTRL2, ctrl2) != QMC5883_OK) return QMC5883_ERROR;
 
-    uint8_t ctrl1 = QMC5883_OSR2_8 | QMC5883_OSR1_8 | QMC5883_ODR_100HZ | QMC5883_MODE_CONTINUOUS;
+    uint8_t ctrl1 = QMC5883_OSR2_2 | QMC5883_OSR1_4 | QMC5883_ODR_100HZ | QMC5883_MODE_NORMAL;
     if(QMC5883_WriteReg(QMC5883_REG_CTRL1, ctrl1) != QMC5883_OK) return QMC5883_ERROR;
 
     qmc5883.calib.offset[0] = 0.0f;
