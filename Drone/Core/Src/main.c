@@ -44,6 +44,7 @@
 #include "rc_task.h"
 #include "nrf24.h"
 #include "debug_task.h"
+#include "bmp388.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -85,13 +86,13 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName){
     }
 }
 
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
-{
-    if (huart == &huart1)
-    {
-
-    }
-}
+//void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+//{
+//    if (huart == &huart1)
+//    {
+//
+//    }
+//}
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
     if(hspi == &hspi2){
@@ -103,16 +104,39 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
     BMI088_DMA_Callback(hspi);
 }
 
+static void I2C_TransferDone(I2C_HandleTypeDef *hi2c){
+    if(hi2c != &hi2c2) return;
+    if(hi2c->Devaddress == QMC5883_I2C_ADDR) QMC5883_DMA_Callback(hi2c);
+    else if(hi2c->Devaddress == bmp388.addr) BMP388_DMA_Callback(hi2c);
+}
+
+void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c){
+    I2C_TransferDone(hi2c);
+}
+
+void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c){
+    I2C_TransferDone(hi2c);
+}
+
+void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c){
+    I2C_TransferDone(hi2c);
+}
+
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 
-    if(GPIO_Pin == NRF24_IRQ_PIN){
-        NRF24_IRQ_Handler();
-        return;
-    }
+  if(GPIO_Pin == NRF24_IRQ_PIN){
+      NRF24_IRQ_Handler();
+      return;
+  }
 
-    if(bmi088.imuTask == NULL) return;
+  if(GPIO_Pin == BMP388_INT_PIN){
+      BMP388_IRQ_Handler();
+      return;
+  }
 
-    BaseType_t hpw = pdFALSE;
+  if(bmi088.imuTask == NULL) return;
+
+  BaseType_t hpw = pdFALSE;
 
 	if(GPIO_Pin == BMI088_GYRO_INT_Pin){
 		bmi088.gyroIrqCycles = DWT->CYCCNT;
@@ -170,11 +194,12 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_SPI1_Init();
-  MX_USART1_UART_Init();
-  MX_TIM4_Init();
   MX_I2C2_Init();
   MX_SPI2_Init();
   MX_SPI3_Init();
+  MX_TIM1_Init();
+  MX_I2C1_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   MotorOutput_Init();
   //ESC_Calibrate(); /* Dont know why it hangs */

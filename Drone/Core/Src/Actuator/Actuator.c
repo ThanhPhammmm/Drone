@@ -3,7 +3,7 @@
 #include "arm.h"
 #include "debug.h"
 
-#define MOTOR_TIM      htim4
+#define MOTOR_TIM      htim1
 #define MOTOR_PWM_MIN  1000.0f   /* µs = throttle 0 / disarmed */
 #define MOTOR_PWM_MAX  2000.0f   /* µs = throttle 1 */
 #define MOTOR_IDLE     0.05f     /* spin-min while motors are allowed to move (0..1) */
@@ -12,7 +12,7 @@
 #define MOTOR_DESAT_MIN_THROTTLE  0.05f
 
 static const uint32_t motorChannel[MOTOR_COUNT] = {
-	TIM_CHANNEL_4, TIM_CHANNEL_2, TIM_CHANNEL_3,TIM_CHANNEL_1
+	TIM_CHANNEL_1, TIM_CHANNEL_2, TIM_CHANNEL_3,TIM_CHANNEL_4
 };
 
 static const float mix[MOTOR_COUNT][4] = {

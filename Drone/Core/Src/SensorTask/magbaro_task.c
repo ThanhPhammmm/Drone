@@ -1,18 +1,17 @@
 #include "magbaro_task.h"
 
-#define MAGBARO_TASK_RATE_HZ     100
-#define MAGBARO_TASK_PERIOD_MS   (1000 / MAGBARO_TASK_RATE_HZ)
+#define MAGBARO_WAIT_MS          50
 
 #define MAGBARO_POWERUP_MS       50      /* both sensors finish their power-on reset */
 #define MAGBARO_INIT_TRIES       5
 #define MAGBARO_INIT_RETRY_MS    50
 
-#define MAGBARO_STALL_MS         250
+#define MAGBARO_STALL_MS         50
 
 #define MAGBARO_SCL_PORT         GPIOB
 #define MAGBARO_SCL_PIN          GPIO_PIN_10
 #define MAGBARO_SDA_PORT         GPIOB
-#define MAGBARO_SDA_PIN          GPIO_PIN_3
+#define MAGBARO_SDA_PIN          GPIO_PIN_9
 #define MAGBARO_BUS_HALF_US      5       /* 100 kHz while clocking by hand */
 
 static void MagBaro_WaitUs(uint32_t us){
@@ -71,8 +70,9 @@ static void Mag_Restart(void){
     qmc5883.calib = cal;
 }
 
-/* 1 = a new sample was read */
-static uint8_t Baro_Update(void){
+/* 1 = a new sample was read. woken = the INT edge said so, and its time is
+ * the sample's time. */
+static uint8_t Baro_Update(uint8_t woken){
     if(Calib_GetStatus(CALIB_SENSOR_BMP388) == CALIB_WAITING && Calib_IsTurn(CALIB_SENSOR_BMP388)){
 #if CALIB_BMP388_RUN
         BMP388_GroundRefReset();
@@ -94,7 +94,7 @@ static uint8_t Baro_Update(void){
         baro.pressure_pa   = bmp388.pressure_pa;
         baro.temperature_c = bmp388.temperature_c;
         baro.altitude_m    = bmp388.altitude_m;
-        baro.timestamp_us  = Time_Us();
+        baro.timestamp_us  = woken ? Time_UsAt(bmp388.irqCycles) : Time_Us();
         BaroTopic_Publish(&baro);
     }
     return 1;
@@ -139,6 +139,7 @@ static uint8_t Mag_Update(void){
 }
 
 void MagBaroTask(void *argument){
+    BMP388_SetTaskHandle(xTaskGetCurrentTaskHandle());
     vTaskDelay(pdMS_TO_TICKS(MAGBARO_POWERUP_MS));
 
     uint8_t magOk  = 0;
@@ -158,16 +159,15 @@ void MagBaroTask(void *argument){
         vTaskDelete(NULL);
     }
 
-    TickType_t last     = xTaskGetTickCount();
-    TickType_t baroSeen = last;
-    TickType_t magSeen  = last;
+    TickType_t baroSeen = xTaskGetTickCount();
+    TickType_t magSeen  = baroSeen;
 
     while(1){
-        vTaskDelayUntil(&last, pdMS_TO_TICKS(MAGBARO_TASK_PERIOD_MS));
+        uint8_t woken = (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(MAGBARO_WAIT_MS)) > 0U);
         TickType_t now = xTaskGetTickCount();
 
         if(baroOk){
-            if(Baro_Update()) baroSeen = now;
+            if(Baro_Update(woken) || !Calib_Finished(CALIB_SENSOR_BMP388)) baroSeen = now;
             else if((TickType_t)(now - baroSeen) >= pdMS_TO_TICKS(MAGBARO_STALL_MS)){
                 Baro_Restart();
                 baroSeen = xTaskGetTickCount();

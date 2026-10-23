@@ -1,4 +1,5 @@
 #include "bmp388.h"
+#include "semphr.h"
 
 #define BARO_I2C                    hi2c2
 #define BMP388_I2C_TIMEOUT_MS       10
@@ -6,17 +7,38 @@
 
 BMP388_Handle_t bmp388;
 
-static BMP388_Status_t BMP388_WaitDma(HAL_StatusTypeDef started){
-    if(started == HAL_OK){
-        TickType_t start = xTaskGetTickCount();
-        while(HAL_I2C_GetState(&BARO_I2C) != HAL_I2C_STATE_READY &&
-              (xTaskGetTickCount() - start) <= pdMS_TO_TICKS(BMP388_I2C_TIMEOUT_MS)){
-            vTaskDelay(1);
-        }
-        if(HAL_I2C_GetState(&BARO_I2C) == HAL_I2C_STATE_READY &&
-           HAL_I2C_GetError(&BARO_I2C) == HAL_I2C_ERROR_NONE){
-            return BMP388_OK;
-        }
+static SemaphoreHandle_t bmp388DmaSem = NULL;
+
+void BMP388_SetTaskHandle(TaskHandle_t handle){
+    bmp388.task = handle;
+}
+
+void BMP388_IRQ_Handler(void){
+    bmp388.irqCycles = DWT->CYCCNT;
+    if(bmp388.task == NULL) return;
+
+    BaseType_t hpw = pdFALSE;
+    vTaskNotifyGiveFromISR(bmp388.task, &hpw);
+    portYIELD_FROM_ISR(hpw);
+}
+
+void BMP388_DMA_Callback(I2C_HandleTypeDef *hi2c){
+    if(bmp388DmaSem == NULL) return;
+
+    BaseType_t hpw = pdFALSE;
+    xSemaphoreGiveFromISR(bmp388DmaSem, &hpw);
+    portYIELD_FROM_ISR(hpw);
+}
+
+static void BMP388_ClearDMACompletion(void){
+    while(xSemaphoreTake(bmp388DmaSem, 0) == pdTRUE){}
+}
+
+static BMP388_Status_t BMP388_WaitDMA(HAL_StatusTypeDef started){
+    if(started == HAL_OK &&
+       xSemaphoreTake(bmp388DmaSem, pdMS_TO_TICKS(BMP388_I2C_TIMEOUT_MS)) == pdTRUE &&
+       HAL_I2C_GetError(&BARO_I2C) == HAL_I2C_ERROR_NONE){
+        return BMP388_OK;
     }
     HAL_I2C_DeInit(&BARO_I2C);
     HAL_I2C_Init(&BARO_I2C);
@@ -24,7 +46,8 @@ static BMP388_Status_t BMP388_WaitDma(HAL_StatusTypeDef started){
 }
 
 static BMP388_Status_t BMP388_WriteReg(uint8_t reg, uint8_t val){
-    return BMP388_WaitDma(HAL_I2C_Mem_Write_DMA(&BARO_I2C, bmp388.addr, reg, I2C_MEMADD_SIZE_8BIT,
+    BMP388_ClearDMACompletion();
+    return BMP388_WaitDMA(HAL_I2C_Mem_Write_DMA(&BARO_I2C, bmp388.addr, reg, I2C_MEMADD_SIZE_8BIT,
                                                 &val, 1));
 }
 
@@ -35,7 +58,8 @@ static BMP388_Status_t BMP388_ReadRegs(uint8_t reg, uint8_t *buf, uint16_t len){
         buf[0] = two[0];
         return BMP388_OK;
     }
-    return BMP388_WaitDma(HAL_I2C_Mem_Read_DMA(&BARO_I2C, bmp388.addr, reg, I2C_MEMADD_SIZE_8BIT,
+    BMP388_ClearDMACompletion();
+    return BMP388_WaitDMA(HAL_I2C_Mem_Read_DMA(&BARO_I2C, bmp388.addr, reg, I2C_MEMADD_SIZE_8BIT,
                                                buf, len));
 }
 
@@ -96,6 +120,9 @@ static BMP388_Status_t BMP388_ReadCalib(void){
 }
 
 BMP388_Status_t BMP388_Init(void){
+    if(bmp388DmaSem == NULL) bmp388DmaSem = xSemaphoreCreateBinary();
+    if(bmp388DmaSem == NULL) return BMP388_ERROR;
+
     if(BMP388_ProbeAddress() != BMP388_OK) return BMP388_INVALID_CHIP;
 
     if(BMP388_WriteReg(BMP388_REG_CMD, BMP388_CMD_SOFT_RESET) != BMP388_OK) return BMP388_ERROR;
@@ -107,6 +134,10 @@ BMP388_Status_t BMP388_Init(void){
     if(BMP388_WriteReg(BMP388_REG_OSR, BMP388_OSR_P_8 | BMP388_OSR_T_1) != BMP388_OK) return BMP388_ERROR;
     if(BMP388_WriteReg(BMP388_REG_ODR, BMP388_ODR_50HZ) != BMP388_OK) return BMP388_ERROR;
     if(BMP388_WriteReg(BMP388_REG_CONFIG, BMP388_IIR_COEF_3) != BMP388_OK) return BMP388_ERROR;
+
+    /* data ready on the INT pin: push-pull, active high, held until INT_STATUS is read */
+    uint8_t intCtrl = BMP388_INT_DRDY_EN | BMP388_INT_ACTIVE_HIGH | BMP388_INT_LATCH;
+    if(BMP388_WriteReg(BMP388_REG_INT_CTRL, intCtrl) != BMP388_OK) return BMP388_ERROR;
 
     uint8_t pwr = BMP388_PWR_PRESS_EN | BMP388_PWR_TEMP_EN | BMP388_PWR_MODE_NORMAL;
     if(BMP388_WriteReg(BMP388_REG_PWR_CTRL, pwr) != BMP388_OK) return BMP388_ERROR;
@@ -157,8 +188,8 @@ static void BMP388_CompensatePressure(void){
 
 uint8_t BMP388_DataReady(void){
     uint8_t status = 0;
-    if(BMP388_ReadRegs(BMP388_REG_STATUS, &status, 1) != BMP388_OK) return 0;
-    return (status & BMP388_STATUS_DRDY_PRESS) ? 1 : 0;
+    if(BMP388_ReadRegs(BMP388_REG_INT_STATUS, &status, 1) != BMP388_OK) return 0;
+    return (status & BMP388_INT_STATUS_DRDY) ? 1 : 0;
 }
 
 BMP388_Status_t BMP388_Read(void){

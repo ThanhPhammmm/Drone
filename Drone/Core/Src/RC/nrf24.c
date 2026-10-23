@@ -34,7 +34,12 @@ void NRF24_DMA_Callback(SPI_HandleTypeDef *hspi){
     portYIELD_FROM_ISR(hpw);
 }
 
+void NRF24_ClearDMACompletion(void){
+    while(xSemaphoreTake(nrf24DmaDone, 0) == pdTRUE){}
+}
+
 static uint8_t NRF24_Transfer(uint8_t *tx, uint8_t *rx, uint16_t len){
+	NRF24_ClearDMACompletion();
     NRF24_CSN(GPIO_PIN_RESET);
     if(HAL_SPI_TransmitReceive_DMA(&NRF24_SPI, tx, rx, len) != HAL_OK){
         NRF24_CSN(GPIO_PIN_SET);
