@@ -4,7 +4,7 @@
 /* 1: debug task running.
  * 0: flight build, no task, no UART traffic. */
 
-#define DEBUG_PRINT			1
+#define DEBUG_PRINT			0
 #define DEBUG_PERIOD_MS		1000U
 
 void DebugTask(void *argument);

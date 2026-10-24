@@ -13,8 +13,8 @@
 #define NRF24_SPI               hspi2
 #define NRF24_CSN_PORT          GPIOA
 #define NRF24_CSN_PIN           GPIO_PIN_1
-#define NRF24_CE_PORT           GPIOA
-#define NRF24_CE_PIN            GPIO_PIN_8
+#define NRF24_CE_PORT           GPIOB
+#define NRF24_CE_PIN            GPIO_PIN_2
 #define NRF24_IRQ_PIN           GPIO_PIN_2      /* EXTI1, falling edge */
 
 #define NRF24_CHANNEL           76

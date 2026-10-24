@@ -1,4 +1,3 @@
-
 #ifndef INC_SENSORDRIVER_BMP388_BMP388_REG_H_
 #define INC_SENSORDRIVER_BMP388_BMP388_REG_H_
 
@@ -12,6 +11,7 @@
 #define BMP388_REG_SENSORTIME        0x0C
 #define BMP388_REG_EVENT             0x10
 #define BMP388_REG_INT_STATUS        0x11
+#define BMP388_REG_INT_CTRL          0x19
 #define BMP388_REG_PWR_CTRL          0x1B
 #define BMP388_REG_OSR               0x1C
 #define BMP388_REG_ODR               0x1D
@@ -33,6 +33,15 @@
 #define BMP388_STATUS_CMD_RDY        0x10
 #define BMP388_STATUS_DRDY_PRESS     0x20
 #define BMP388_STATUS_DRDY_TEMP      0x40
+
+/* INT_STATUS (0x11), cleared by reading it */
+#define BMP388_INT_STATUS_DRDY       0x08
+
+/* INT_CTRL (0x19) */
+#define BMP388_INT_OPEN_DRAIN        0x01    /* 0 = push-pull */
+#define BMP388_INT_ACTIVE_HIGH       0x02
+#define BMP388_INT_LATCH             0x04    /* INT pin held until INT_STATUS is read */
+#define BMP388_INT_DRDY_EN           0x40
 
 /* PWR_CTRL (0x1B): [1:0]=enables [5:4]=mode */
 #define BMP388_PWR_PRESS_EN          0x01

@@ -1,4 +1,5 @@
 #include "qmc5883.h"
+#include "semphr.h"
 #include "debug.h"
 
 /*
@@ -12,17 +13,25 @@
 
 QMC5883_Handle_t qmc5883;
 
-static QMC5883_Status_t QMC5883_WaitDma(HAL_StatusTypeDef started){
-    if(started == HAL_OK){
-        TickType_t start = xTaskGetTickCount();
-        while(HAL_I2C_GetState(&MAG_I2C) != HAL_I2C_STATE_READY &&
-              (xTaskGetTickCount() - start) <= pdMS_TO_TICKS(QMC5883_I2C_TIMEOUT_MS)){
-            vTaskDelay(1);
-        }
-        if(HAL_I2C_GetState(&MAG_I2C) == HAL_I2C_STATE_READY &&
-           HAL_I2C_GetError(&MAG_I2C) == HAL_I2C_ERROR_NONE){
-            return QMC5883_OK;
-        }
+static SemaphoreHandle_t qmc5883DmaSem = NULL;
+
+void QMC5883_DMA_Callback(I2C_HandleTypeDef *hi2c){
+    if(qmc5883DmaSem == NULL) return;
+
+    BaseType_t hpw = pdFALSE;
+    xSemaphoreGiveFromISR(qmc5883DmaSem, &hpw);
+    portYIELD_FROM_ISR(hpw);
+}
+
+static void QMC5883_ClearDMACompletion(void){
+    while(xSemaphoreTake(qmc5883DmaSem, 0) == pdTRUE){}
+}
+
+static QMC5883_Status_t QMC5883_WaitDMA(HAL_StatusTypeDef started){
+    if(started == HAL_OK &&
+       xSemaphoreTake(qmc5883DmaSem, pdMS_TO_TICKS(QMC5883_I2C_TIMEOUT_MS)) == pdTRUE &&
+       HAL_I2C_GetError(&MAG_I2C) == HAL_I2C_ERROR_NONE){
+        return QMC5883_OK;
     }
     HAL_I2C_DeInit(&MAG_I2C);
     HAL_I2C_Init(&MAG_I2C);
@@ -30,7 +39,8 @@ static QMC5883_Status_t QMC5883_WaitDma(HAL_StatusTypeDef started){
 }
 
 static QMC5883_Status_t QMC5883_WriteReg(uint8_t reg, uint8_t val){
-    return QMC5883_WaitDma(HAL_I2C_Mem_Write_DMA(&MAG_I2C, QMC5883_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
+    QMC5883_ClearDMACompletion();
+    return QMC5883_WaitDMA(HAL_I2C_Mem_Write_DMA(&MAG_I2C, QMC5883_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
                                                  &val, 1));
 }
 
@@ -41,11 +51,15 @@ static QMC5883_Status_t QMC5883_ReadRegs(uint8_t reg, uint8_t *buf, uint16_t len
         buf[0] = two[0];
         return QMC5883_OK;
     }
-    return QMC5883_WaitDma(HAL_I2C_Mem_Read_DMA(&MAG_I2C, QMC5883_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
+    QMC5883_ClearDMACompletion();
+    return QMC5883_WaitDMA(HAL_I2C_Mem_Read_DMA(&MAG_I2C, QMC5883_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
                                                 buf, len));
 }
 
 QMC5883_Status_t QMC5883_Init(void){
+    if(qmc5883DmaSem == NULL) qmc5883DmaSem = xSemaphoreCreateBinary();
+    if(qmc5883DmaSem == NULL) return QMC5883_ERROR;
+
     uint8_t chipId = 0;
     if(QMC5883_ReadRegs(QMC5883_REG_CHIP_ID, &chipId, 1) != QMC5883_OK) return QMC5883_ERROR;
     if(chipId != QMC5883_CHIP_ID_VALUE) return QMC5883_INVALID_CHIP;
