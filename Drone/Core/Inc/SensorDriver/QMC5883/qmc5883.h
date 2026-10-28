@@ -24,5 +24,6 @@ void QMC5883_CalibReset(void);
 void QMC5883_CalibAccumulate(void);
 QMC5883_Status_t QMC5883_CalibFinish(void);
 void QMC5883_SetOffsets(float x, float y, float z);
+void QMC5883_DMA_Callback(I2C_HandleTypeDef *hi2c);
 
 #endif /* INC_SENSORDRIVER_QMC5883_QMC5883_H_ */
