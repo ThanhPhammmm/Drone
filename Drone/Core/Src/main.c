@@ -45,6 +45,7 @@
 #include "nrf24.h"
 #include "debug_task.h"
 #include "bmp388.h"
+#include "rangeflow_task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -93,6 +94,12 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName){
 //
 //    }
 //}
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
+    if(hspi == &PMW3901_SPI){
+        PMW3901_TxCallback(hspi);
+        return;
+    }
+}
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
     if(hspi == &hspi2){
@@ -105,6 +112,10 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
 }
 
 static void I2C_TransferDone(I2C_HandleTypeDef *hi2c){
+    if(hi2c == &VL53L1X_I2C){
+        VL53L1X_DMA_Callback(hi2c);
+        return;
+    }
     if(hi2c != &hi2c2) return;
     if(hi2c->Devaddress == QMC5883_I2C_ADDR) QMC5883_DMA_Callback(hi2c);
     else if(hi2c->Devaddress == bmp388.addr) BMP388_DMA_Callback(hi2c);
@@ -131,6 +142,11 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 
   if(GPIO_Pin == BMP388_INT_PIN){
       BMP388_IRQ_Handler();
+      return;
+  }
+
+  if(GPIO_Pin == VL53L1X_INT_PIN){
+      VL53L1X_IRQ_Handler();
       return;
   }
 
@@ -214,6 +230,7 @@ int main(void)
 	//xTaskCreate(MagTask, "MAG", STACK_MAG, NULL, TASK_PRIO_MAG, NULL);
 	xTaskCreate(MagBaroTask, "MAGBARO", STACK_MAGBARO, NULL, TASK_PRIO_MAGBARO, NULL);
 	xTaskCreate(RCTask, "RC", STACK_RC, NULL, TASK_PRIO_RC, NULL);
+	xTaskCreate(RangeFlowTask, "RANGEFLOW", STACK_RANGEFLOW, NULL, TASK_PRIO_RANGEFLOW, NULL);
 #if DEBUG_PRINT
 	xTaskCreate(DebugTask, "DEBUG", STACK_DEBUG, NULL, TASK_PRIO_DEBUG, NULL);
 #endif

@@ -12,13 +12,16 @@
 #include "thrust_topic.h"
 #include "rc_topic.h"
 #include "altitude_setpoint_topic.h"
+#include "flow_topic.h"
+#include "range_topic.h"
 #include "actuator.h"
 
-#define TASK_PRIO_IMU				7
-#define TASK_PRIO_ATT_ESTIMATOR		6
-#define TASK_PRIO_ATT_CTRL			5
-#define TASK_PRIO_RATE				4
+#define TASK_PRIO_IMU				8
+#define TASK_PRIO_ATT_ESTIMATOR		7
+#define TASK_PRIO_ATT_CTRL			6
+#define TASK_PRIO_RATE				5
 
+#define TASK_PRIO_RANGEFLOW			7
 #define TASK_PRIO_MAGBARO			6
 #define TASK_PRIO_ALT_ESTIMATOR		5
 #define TASK_PRIO_ALT_CTRL			4
@@ -39,6 +42,7 @@
 #define STACK_ALT_ESTIMATOR			512
 #define STACK_ALT_CTRL			    512
 #define STACK_RC					512
+#define STACK_RANGEFLOW				512
 
 void App_Init(void);
 

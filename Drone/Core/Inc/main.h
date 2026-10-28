@@ -94,6 +94,7 @@ void Error_Handler(void);
 #define NRF2401_MOSI_GPIO_Port GPIOB
 #define VL53L1X_GPIO1_Pin GPIO_PIN_12
 #define VL53L1X_GPIO1_GPIO_Port GPIOA
+#define VL53L1X_GPIO1_EXTI_IRQn EXTI15_10_IRQn
 #define GPS_TX_Pin GPIO_PIN_15
 #define GPS_TX_GPIO_Port GPIOA
 #define GPS_RX_Pin GPIO_PIN_3
