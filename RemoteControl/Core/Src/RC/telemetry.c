@@ -18,6 +18,9 @@ Telemetry_t telemetry;
 
 static TLM_Attitude_t rawAtt;
 static TLM_Output_t   rawOut;
+static TLM_Sensor_t   rawSen = {             /* "no sample" until the first sensor frame */
+    .rangeStatus = 255, .rangeAgeMs = 255, .flowAgeMs = 255, .baroAgeMs = 255,
+};
 static uint32_t       outCount;
 static uint8_t        linkPct;
 static uint64_t       linkHistory;          /* 1 bit per packet, newest in bit 0 */
@@ -83,6 +86,31 @@ void Telemetry_Decode(const uint8_t *buf, uint8_t len){
         telemetry.vibration     = f.vibration    * 0.1f;
         telemetry.rateDtMaxUs   = f.rateDtMaxUs;
         telemetry.rcLost        = f.rcLost;
+    }
+    else if(buf[1] == TLM_FRAME_SENSOR && len == sizeof(TLM_Sensor_t)){
+        TLM_Sensor_t f;
+        memcpy(&f, buf, sizeof(f));
+
+        taskENTER_CRITICAL();
+        rawSen = f;
+        taskEXIT_CRITICAL();
+
+        Telemetry_DecodeState(f.state);
+        telemetry.sensorValid   = f.valid;
+        telemetry.rangeReady    = (f.valid & TLM_VALID_RANGE_INIT) ? 1 : 0;
+        telemetry.flowReady     = (f.valid & TLM_VALID_FLOW_INIT)  ? 1 : 0;
+        telemetry.range         = f.rangeMm     * 0.001f;
+        telemetry.rangeHeight   = f.rangeHeight * 0.01f;
+        telemetry.rangeStatus   = f.rangeStatus;
+        telemetry.rangeAgeMs    = f.rangeAgeMs;
+        telemetry.accelBias     = f.accelBias   * 0.01f;
+        telemetry.flowX         = f.flowX;
+        telemetry.flowY         = f.flowY;
+        telemetry.flowDtMs      = f.flowDtMs;
+        telemetry.squal         = f.squal;
+        telemetry.flowAgeMs     = f.flowAgeMs;
+        telemetry.baroAgeMs     = f.baroAgeMs;
+        telemetry.tiltDeg       = f.tiltDeg;
     }
     else{
         return;
@@ -154,12 +182,14 @@ static const char tlmHeader[] =
     "vib,dtMax,rcLost\r\n";
 
 static const char tlmLegend[] =
-    "# drone telemetry, 25 Hz. angles deg, rates deg/s, motors us, alt m, vz m/s, vib m/s^2, dtMax us\r\n"
+    "# drone telemetry, ~17 Hz. angles deg, rates deg/s, motors us, alt m, vz m/s, vib m/s^2, dtMax us\r\n"
     "# arm: 0 DISARMED 1 ARMING 2 ARMED_GROUND 3 TAKEOFF 4 AIRBORNE 5 LANDING 6 FAILSAFE\r\n"
-    "# mode: 0 ANGLE 1 ALT_HOLD 2 POS_HOLD | flags (calibrated): 1 imu, 2 baro, 4 compass (7 = all)\r\n"
-    "# YawSp: yaw rate setpoint, deg/s (yaw is flown as a rate) | Hover: hover thrust measured in flight (0 = not known yet, set once AIRBORNE)\r\n"
+    "# mode: 0 ANGLE 1 ALT_HOLD 2 POS_HOLD | (IMU MAG BARO RANGE FLOW): sensor ready, noXXX = not. IMU/MAG/BARO calibrated, RANGE/FLOW initialized\r\n"    "# YawSp: yaw rate setpoint, deg/s (yaw is flown as a rate) | Hover: hover thrust measured in flight (0 = not known yet, set once AIRBORNE)\r\n"
     "# sat: 1 roll/pitch cut, 2 yaw cut, 4 throttle at max, 8 throttle at min, 16 TUMBLE CUT-OFF (motors stopped) | Valid: altitude estimate usable (1 = ALT_HOLD possible)\r\n"
     "# motors: M1 front-right, M2 rear-right, M3 rear-left, M4 front-left\r\n"
+    "# [ALT] BaroOk: baro reaching the estimator, BaroAge ms, ABias m/s^2 estimator accel bias\r\n"
+    "# [TOF] Dist m along the sensor, Height m tilt corrected, Status 0 ok 1 sigma 2 signal 3 too close 4 too far 7 wrap 255 none, Age ms (255 = none), Ok: valid and fresh, Tilt deg\r\n"
+    "# [FLOW] X/Y counts in the last sample, Dt ms it covers, Squal surface quality (>= 25 usable), Age ms, Ok: good and fresh\r\n"
     "# [RC]: what this remote commands now (RollSp/PitchSp deg, YawSp deg/s); [ATT] RollSp/PitchSp/YawSp: what the drone got\r\n";
 
 /* Stick -> setpoint, the same scaling as the drone's rc_task.c
@@ -193,7 +223,8 @@ static char *PutStick(char *p){
     return p;
 }
 
-static uint16_t Telemetry_FormatLine(char *buf, const TLM_Attitude_t *a, const TLM_Output_t *o, uint8_t link){
+static uint16_t Telemetry_FormatLine(char *buf, const TLM_Attitude_t *a, const TLM_Output_t *o,
+                                     const TLM_Sensor_t *s, uint8_t link){
     char *p = buf;
 
     p = PutStr(p, "[SYS] ");
@@ -201,10 +232,11 @@ static uint16_t Telemetry_FormatLine(char *buf, const TLM_Attitude_t *a, const T
     FIELD_LABELED("ms, Link:", link, 0);
     FIELD_LABELED("%, Arm:", o->state & TLM_STATE_ARM_MASK, 0);
     FIELD_LABELED(", Mode:", (o->state & TLM_STATE_MODE_MASK) >> TLM_STATE_MODE_SHIFT, 0);
-    FIELD_LABELED(", Flags:", o->state >> 5, 0);
-    p = PutStr(p, (o->state & TLM_STATE_IMU_CAL)  ? " (IMU"  : " (noIMU");
-    p = PutStr(p, (o->state & TLM_STATE_BARO_CAL) ? " BARO"  : " noBARO");
-    p = PutStr(p, (o->state & TLM_STATE_MAG_CAL)  ? " MAG)"  : " noMAG)");
+    p = PutStr(p, (o->state & TLM_STATE_IMU_CAL) ? " (IMU" : " (noIMU");
+    p = PutStr(p, (o->state & TLM_STATE_MAG_CAL) ? " MAG"  : " noMAG");
+    p = PutStr(p, ((o->state & TLM_STATE_BARO_CAL)) ? " BARO" : " noBARO");
+    p = PutStr(p, (s->valid & TLM_VALID_RANGE_INIT) ? " RANGE" : " noRANGE");
+    p = PutStr(p, (s->valid & TLM_VALID_FLOW_INIT)  ? " FLOW)" : " noFLOW)");
 
     p = PutStr(p, " | [ATT] ");
     FIELD_LABELED("Roll:", a->roll, 2);
@@ -231,6 +263,25 @@ static uint16_t Telemetry_FormatLine(char *buf, const TLM_Attitude_t *a, const T
     FIELD_LABELED(", ClimbSp:", o->climbSp, 2);
     FIELD_LABELED(", AccelUp:", o->accelUp, 2);
     FIELD_LABELED(", Valid:", (o->sat & TLM_SAT_ALT_VALID) ? 1 : 0, 0);
+    FIELD_LABELED(", BaroOk:", (s->valid & TLM_VALID_BARO) ? 1 : 0, 0);
+    FIELD_LABELED(", BaroAge:", s->baroAgeMs, 0);
+    FIELD_LABELED(", ABias:", s->accelBias, 2);
+
+    p = PutStr(p, " | [TOF] ");
+    FIELD_LABELED("Dist:", s->rangeMm, 3);
+    FIELD_LABELED(", Height:", s->rangeHeight, 2);
+    FIELD_LABELED(", Status:", s->rangeStatus, 0);
+    FIELD_LABELED(", Age:", s->rangeAgeMs, 0);
+    FIELD_LABELED(", Ok:", (s->valid & TLM_VALID_RANGE) ? 1 : 0, 0);
+    FIELD_LABELED(", Tilt:", s->tiltDeg, 0);
+
+    p = PutStr(p, " | [FLOW] ");
+    FIELD_LABELED("X:", s->flowX, 0);
+    FIELD_LABELED(", Y:", s->flowY, 0);
+    FIELD_LABELED(", Dt:", s->flowDtMs, 0);
+    FIELD_LABELED(", Squal:", s->squal, 0);
+    FIELD_LABELED(", Age:", s->flowAgeMs, 0);
+    FIELD_LABELED(", Ok:", (s->valid & TLM_VALID_FLOW) ? 1 : 0, 0);
 
     p = PutStr(p, " | [MISC] ");
     FIELD_LABELED("Vib:", o->vibration, 1);
@@ -256,11 +307,13 @@ void TelemetryPrintTask(void *argument){
 
         TLM_Attitude_t a;
         TLM_Output_t   o;
+        TLM_Sensor_t   s;
         uint32_t       count;
         
         taskENTER_CRITICAL();
         a     = rawAtt;
         o     = rawOut;
+        s     = rawSen;
         count = outCount;
         taskEXIT_CRITICAL();
 
@@ -269,7 +322,7 @@ void TelemetryPrintTask(void *argument){
         if(count != printed){
             printed = count;
             TLM_WaitIdle();     /* the last line may still be on the wire */
-            TLM_Write(line, Telemetry_FormatLine(line, &a, &o, linkPct));
+            TLM_Write(line, Telemetry_FormatLine(line, &a, &o, &s, linkPct));
         }
         else if((now - telemetry.lastFrameTick) > pdMS_TO_TICKS(TLM_STALE_MS) &&
                 (now - lastStale) > pdMS_TO_TICKS(1000)){

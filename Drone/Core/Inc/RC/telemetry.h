@@ -19,9 +19,14 @@
 #include "altitude_setpoint_topic.h"
 #include "altitude_topic.h"
 #include "baro_topic.h"
+#include "range_topic.h"
+#include "flow_topic.h"
+#include "timebase.h"
 #include "thrust_topic.h"
 #include "actuator.h"
 #include "rate_controller_task.h"
+#include "flow_topic.h"
+#include "rangeflow_task.h"
 
 uint8_t Telemetry_Build(uint8_t *buf, uint8_t rcSeq, uint16_t rcLost);
 

@@ -35,6 +35,7 @@ typedef struct __attribute__((packed)){
 #define TLM_MAGIC               0x5A
 #define TLM_FRAME_ATTITUDE      0
 #define TLM_FRAME_OUTPUT        1
+#define TLM_FRAME_SENSOR        2
 
 /* state byte */
 #define TLM_STATE_ARM_MASK      0x07    /* arm_state_t: 0 DISARMED .. 6 FAILSAFE */
@@ -83,5 +84,32 @@ typedef struct __attribute__((packed)){
     uint8_t  sat;               /* TLM_SAT_* */
     uint8_t  vibration;         /* | |raw accel| - 1 g | at the sample, 0.1 m/s^2 */
 } TLM_Output_t;                 /* 32 bytes */
+
+/* valid byte (sensor frame): what can be used right now */
+#define TLM_VALID_BARO          0x01    /* baro samples reach the altitude estimator */
+#define TLM_VALID_RANGE         0x02    /* ToF: last sample valid (status 0) and fresh */
+#define TLM_VALID_FLOW          0x04    /* flow: last sample good (squal) and fresh */
+#define TLM_VALID_RANGE_INIT    0x08    /* VL53L1X initialized OK */
+#define TLM_VALID_FLOW_INIT     0x10    /* PMW3901 initialized OK */
+
+typedef struct __attribute__((packed)){
+    uint8_t  magic;
+    uint8_t  type;              /* TLM_FRAME_SENSOR */
+    uint8_t  rcSeq;
+    uint8_t  state;
+    uint8_t  valid;             /* TLM_VALID_* */
+    uint8_t  rangeStatus;       /* ToF status of the last sample: 0 ok, 1 sigma, 2 signal, 3 too close,
+                                   4 too far, 7 wrap, 255 no sample yet */
+    uint16_t rangeMm;           /* ToF distance along the sensor axis, mm */
+    int16_t  rangeHeight;       /* ToF height, tilt corrected, cm */
+    int16_t  accelBias;         /* altitude estimator's accel bias, cm/s^2 */
+    int16_t  flowX, flowY;      /* PMW3901 counts in the last sample, sensor axes */
+    uint8_t  flowDtMs;          /* time the last flow sample covers, ms */
+    uint8_t  squal;             /* PMW3901 surface quality */
+    uint8_t  rangeAgeMs;        /* time since the last sample, ms; 255 = none or older */
+    uint8_t  flowAgeMs;
+    uint8_t  baroAgeMs;
+    uint8_t  tiltDeg;           /* tilt from level: ToF height and flow get worse past ~30 deg */
+} TLM_Sensor_t;                 /* 22 bytes */
 
 #endif /* INC_RC_RC_PROTOCOL_H_ */

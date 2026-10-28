@@ -11,10 +11,16 @@
 
 static uint32_t lastFlowUs;
 
+static volatile uint8_t rangeReady;
+static volatile uint8_t flowReady;
+
+uint8_t RangeFlow_RangeReady(void){ return rangeReady; }
+uint8_t RangeFlow_FlowReady(void){ return flowReady; }
+
 static void Range_Restart(void){
     HAL_I2C_DeInit(&VL53L1X_I2C);
     HAL_I2C_Init(&VL53L1X_I2C);
-    VL53L1X_Init();
+    rangeReady = (VL53L1X_Init() == VL53L1X_OK);
 }
 
 /* 1 = a new range sample was read. GPIO1 stays up until the sample is read,
@@ -58,6 +64,8 @@ void RangeFlowTask(void *argument){
         if(!flowOk)  flowOk  = (PMW3901_Init() == PMW3901_OK);
         if(rangeOk && flowOk) break;
     }
+    rangeReady = rangeOk;
+    flowReady  = flowOk;
 
     if(!rangeOk && !flowOk){
         vTaskDelete(NULL);
