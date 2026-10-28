@@ -11,5 +11,7 @@
 #include "i2c.h"
 
 void RangeFlowTask(void *argument);
+uint8_t RangeFlow_RangeReady(void);    /* VL53L1X initialized OK */
+uint8_t RangeFlow_FlowReady(void);     /* PMW3901 initialized OK */
 
 #endif /* INC_SENSORTASK_RANGEFLOW_TASK_H_ */

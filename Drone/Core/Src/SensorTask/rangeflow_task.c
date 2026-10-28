@@ -9,12 +9,67 @@
 
 #define RANGEFLOW_STALL_MS         250     /* no ToF sample for this long: restart it */
 
+#define RANGEFLOW_SCL_PORT         GPIOB
+#define RANGEFLOW_SCL_PIN          GPIO_PIN_6
+#define RANGEFLOW_SDA_PORT         GPIOB
+#define RANGEFLOW_SDA_PIN          GPIO_PIN_7
+#define RANGEFLOW_BUS_HALF_US      5       /* 100 kHz while clocking by hand */
+
 static uint32_t lastFlowUs;
+
+static volatile uint8_t rangeReady;
+static volatile uint8_t flowReady;
+
+uint8_t RangeFlow_RangeReady(void){ return rangeReady; }
+uint8_t RangeFlow_FlowReady(void){ return flowReady; }
+
+static void RangeFlow_WaitUs(uint32_t us){
+    uint32_t t0 = Time_Us();
+    while((uint32_t)(Time_Us() - t0) < us){}
+}
+
+static void RangeFlow_BusRecover(void){
+    HAL_I2C_DeInit(&VL53L1X_I2C);
+
+    GPIO_InitTypeDef g = {0};
+    g.Mode  = GPIO_MODE_OUTPUT_OD;
+    g.Pull  = GPIO_NOPULL;
+    g.Speed = GPIO_SPEED_FREQ_HIGH;
+    g.Pin   = RANGEFLOW_SCL_PIN;
+    HAL_GPIO_Init(RANGEFLOW_SCL_PORT, &g);
+    g.Pin   = RANGEFLOW_SDA_PIN;
+    HAL_GPIO_Init(RANGEFLOW_SDA_PORT, &g);
+
+    HAL_GPIO_WritePin(RANGEFLOW_SDA_PORT, RANGEFLOW_SDA_PIN, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(RANGEFLOW_SCL_PORT, RANGEFLOW_SCL_PIN, GPIO_PIN_SET);
+    RangeFlow_WaitUs(RANGEFLOW_BUS_HALF_US);
+
+    for(uint8_t i = 0; i < 9; i++){
+        if(HAL_GPIO_ReadPin(RANGEFLOW_SDA_PORT, RANGEFLOW_SDA_PIN) == GPIO_PIN_SET) break;
+        HAL_GPIO_WritePin(RANGEFLOW_SCL_PORT, RANGEFLOW_SCL_PIN, GPIO_PIN_RESET);
+        RangeFlow_WaitUs(RANGEFLOW_BUS_HALF_US);
+        HAL_GPIO_WritePin(RANGEFLOW_SCL_PORT, RANGEFLOW_SCL_PIN, GPIO_PIN_SET);
+        RangeFlow_WaitUs(RANGEFLOW_BUS_HALF_US);
+    }
+
+    /* STOP: SDA goes high while SCL is high */
+    HAL_GPIO_WritePin(RANGEFLOW_SCL_PORT, RANGEFLOW_SCL_PIN, GPIO_PIN_RESET);
+    RangeFlow_WaitUs(RANGEFLOW_BUS_HALF_US);
+    HAL_GPIO_WritePin(RANGEFLOW_SDA_PORT, RANGEFLOW_SDA_PIN, GPIO_PIN_RESET);
+    RangeFlow_WaitUs(RANGEFLOW_BUS_HALF_US);
+    HAL_GPIO_WritePin(RANGEFLOW_SCL_PORT, RANGEFLOW_SCL_PIN, GPIO_PIN_SET);
+    RangeFlow_WaitUs(RANGEFLOW_BUS_HALF_US);
+    HAL_GPIO_WritePin(RANGEFLOW_SDA_PORT, RANGEFLOW_SDA_PIN, GPIO_PIN_SET);
+    RangeFlow_WaitUs(RANGEFLOW_BUS_HALF_US);
+
+    HAL_I2C_Init(&VL53L1X_I2C);
+}
 
 static void Range_Restart(void){
     HAL_I2C_DeInit(&VL53L1X_I2C);
     HAL_I2C_Init(&VL53L1X_I2C);
-    VL53L1X_Init();
+    RangeFlow_BusRecover();
+    rangeReady = (VL53L1X_Init() == VL53L1X_OK);
 }
 
 /* 1 = a new range sample was read. GPIO1 stays up until the sample is read,
@@ -54,10 +109,13 @@ void RangeFlowTask(void *argument){
     uint8_t flowOk  = 0;
     for(uint8_t attempt = 0; attempt < RANGEFLOW_INIT_TRIES && !(rangeOk && flowOk); attempt++){
         if(attempt > 0) vTaskDelay(pdMS_TO_TICKS(RANGEFLOW_INIT_RETRY_MS));
+        RangeFlow_BusRecover();
         if(!rangeOk) rangeOk = (VL53L1X_Init() == VL53L1X_OK);
         if(!flowOk)  flowOk  = (PMW3901_Init() == PMW3901_OK);
         if(rangeOk && flowOk) break;
     }
+    rangeReady = rangeOk;
+    flowReady  = flowOk;
 
     if(!rangeOk && !flowOk){
         vTaskDelete(NULL);

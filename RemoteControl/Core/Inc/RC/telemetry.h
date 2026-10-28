@@ -36,6 +36,22 @@ typedef struct{
     float    verticalSpeed;     /* m/s */
     float    climbSp;           /* m/s */
     float    accelUp;           /* m/s^2 */
+    float    accelBias;         /* m/s^2, altitude estimator's accel bias */
+    uint8_t  baroAgeMs;         /* since the last baro sample, 255 = none */
+
+    /* range and flow sensors (sensor frame) */
+    uint8_t  sensorValid;       /* TLM_VALID_ */
+    uint8_t  rangeReady;        /* VL53L1X initialized */
+    uint8_t  flowReady;         /* PMW3901 initialized */
+    float    range;             /* m, ToF along the sensor axis */
+    float    rangeHeight;       /* m, ToF tilt corrected */
+    uint8_t  rangeStatus;       /* 0 ok, 1 sigma, 2 signal, 3 too close, 4 too far, 7 wrap, 255 none */
+    uint8_t  rangeAgeMs;
+    int16_t  flowX, flowY;      /* counts in the last sample */
+    uint8_t  flowDtMs;
+    uint8_t  squal;
+    uint8_t  flowAgeMs;
+    uint8_t  tiltDeg;
 
     /* health */
     float    vibration;         /* m/s^2 */

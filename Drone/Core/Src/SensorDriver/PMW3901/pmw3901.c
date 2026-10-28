@@ -3,16 +3,15 @@
 #include "timebase.h"
 #include <string.h>
 
-#define PMW3901_SPI_TIMEOUT_MS      5       /* 12 bytes take ~60 us at 1.56 MHz; margin for preemption */
+#define PMW3901_SPI_TIMEOUT_MS      5
 #define PMW3901_ADDR_DATA_US        50      /* after the address byte, before data */
 #define PMW3901_CS_HOLD_US          50      /* after the last byte, before CS goes high */
 #define PMW3901_BETWEEN_US          200     /* CS high between two accesses */
 
 PMW3901_Handle_t pmw3901;
 
-static uint8_t pmw3901Zeros[PMW3901_BURST_LEN];    /* sent on MOSI while reading */
-
-static SemaphoreHandle_t pmw3901TxSem = NULL;
+static SemaphoreHandle_t pmw3901DmaSem = NULL;
+static uint8_t pmw3901Zeros[PMW3901_BURST_LEN];
 
 typedef struct{
     uint8_t reg;
@@ -55,31 +54,22 @@ static void PMW3901_Deselect(void){
     HAL_GPIO_WritePin(PMW3901_CS_PORT, PMW3901_CS_PIN, GPIO_PIN_SET);
 }
 
-void PMW3901_TxCallback(SPI_HandleTypeDef *hspi){
-    if(pmw3901TxSem == NULL) return;
+void PMW3901_DMA_Callback(SPI_HandleTypeDef *hspi){
+    if(pmw3901DmaSem == NULL) return;
 
     BaseType_t hpw = pdFALSE;
-    xSemaphoreGiveFromISR(pmw3901TxSem, &hpw);
+    xSemaphoreGiveFromISR(pmw3901DmaSem, &hpw);
     portYIELD_FROM_ISR(hpw);
 }
 
-static void PMW3901_ClearTxCompletion(void){
-    while(xSemaphoreTake(pmw3901TxSem, 0) == pdTRUE){}
+static void PMW3901_ClearDMACompletion(void){
+    while(xSemaphoreTake(pmw3901DmaSem, 0) == pdTRUE){}
 }
 
-/* One read transfer, CS already low. Blocking, not DMA: in master mode the SPI
- * only clocks data in while it sends, so HAL's DMA read needs a TX stream too,
- * and SPI3 has only RX. At 12 bytes it is shorter than the sensor's own gaps. */
 static PMW3901_Status_t PMW3901_Transfer(uint8_t *tx, uint8_t *rx, uint16_t len){
-    if(HAL_SPI_TransmitReceive(&PMW3901_SPI, tx, rx, len, PMW3901_SPI_TIMEOUT_MS) != HAL_OK) return PMW3901_ERROR;
-    return PMW3901_OK;
-}
-
-/* One write transfer, CS already low: by interrupt, ended by HAL_SPI_TxCpltCallback */
-static PMW3901_Status_t PMW3901_TransmitIT(uint8_t *tx, uint16_t len){
-    PMW3901_ClearTxCompletion();
-    if(HAL_SPI_Transmit_IT(&PMW3901_SPI, tx, len) != HAL_OK) return PMW3901_ERROR;
-    if(xSemaphoreTake(pmw3901TxSem, pdMS_TO_TICKS(PMW3901_SPI_TIMEOUT_MS)) != pdTRUE){
+    PMW3901_ClearDMACompletion();
+    if(HAL_SPI_TransmitReceive_DMA(&PMW3901_SPI, tx, rx, len) != HAL_OK) return PMW3901_ERROR;
+    if(xSemaphoreTake(pmw3901DmaSem, pdMS_TO_TICKS(PMW3901_SPI_TIMEOUT_MS)) != pdTRUE){
         HAL_SPI_Abort(&PMW3901_SPI);
         return PMW3901_ERROR;
     }
@@ -114,11 +104,12 @@ static PMW3901_Status_t PMW3901_ReadReg(uint8_t reg, uint8_t *val){
 
 static PMW3901_Status_t PMW3901_WriteReg(uint8_t reg, uint8_t val){
     uint8_t tx[2] = { (uint8_t)(reg | PMW3901_SPI_WRITE), val };
+    uint8_t rx[2];
     PMW3901_Status_t st;
 
     PMW3901_Select();
     PMW3901_WaitUs(PMW3901_ADDR_DATA_US);
-    st = PMW3901_TransmitIT(tx, 2);
+    st = PMW3901_Transfer(tx, rx, 2);
     PMW3901_WaitUs(PMW3901_CS_HOLD_US);
     PMW3901_Deselect();
     PMW3901_WaitUs(PMW3901_BETWEEN_US);
@@ -133,8 +124,8 @@ static PMW3901_Status_t PMW3901_WriteTable(const PMW3901_RegVal_t *t, uint16_t n
 }
 
 PMW3901_Status_t PMW3901_Init(void){
-    if(pmw3901TxSem == NULL) pmw3901TxSem = xSemaphoreCreateBinary();
-    if(pmw3901TxSem == NULL) return PMW3901_ERROR;
+    if(pmw3901DmaSem == NULL) pmw3901DmaSem = xSemaphoreCreateBinary();
+    if(pmw3901DmaSem == NULL) return PMW3901_ERROR;
 
     memset(&pmw3901, 0, sizeof(pmw3901));
 
@@ -169,7 +160,6 @@ PMW3901_Status_t PMW3901_Init(void){
         return PMW3901_ERROR;
     }
 
-    /* drop whatever moved during the init */
     return PMW3901_Read();
 }
 

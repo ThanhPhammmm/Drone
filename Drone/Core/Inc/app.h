@@ -16,17 +16,18 @@
 #include "range_topic.h"
 #include "actuator.h"
 
-#define TASK_PRIO_IMU				8
-#define TASK_PRIO_ATT_ESTIMATOR		7
-#define TASK_PRIO_ATT_CTRL			6
-#define TASK_PRIO_RATE				5
+#define TASK_PRIO_IMU               9
+#define TASK_PRIO_ATT_ESTIMATOR     8
+#define TASK_PRIO_ATT_CTRL          7
+#define TASK_PRIO_RATE              6
 
-#define TASK_PRIO_RANGEFLOW			7
-#define TASK_PRIO_MAGBARO			6
-#define TASK_PRIO_ALT_ESTIMATOR		5
-#define TASK_PRIO_ALT_CTRL			4
+#define TASK_PRIO_ALT_ESTIMATOR     5
+#define TASK_PRIO_ALT_CTRL          4
 
-#define TASK_PRIO_RC				3
+#define TASK_PRIO_RC                3
+
+#define TASK_PRIO_MAGBARO           2
+#define TASK_PRIO_RANGEFLOW         2
 
 #define TASK_PRIO_MAG				1
 #define TASK_PRIO_DEBUG				1

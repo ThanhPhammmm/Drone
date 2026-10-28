@@ -47,8 +47,8 @@ static BMP388_Status_t BMP388_WaitDMA(HAL_StatusTypeDef started){
 
 static BMP388_Status_t BMP388_WriteReg(uint8_t reg, uint8_t val){
     BMP388_ClearDMACompletion();
-    return BMP388_WaitDMA(HAL_I2C_Mem_Write_DMA(&BARO_I2C, bmp388.addr, reg, I2C_MEMADD_SIZE_8BIT,
-                                                &val, 1));
+    return BMP388_WaitDMA(HAL_I2C_Mem_Write_IT(&BARO_I2C, bmp388.addr, reg, I2C_MEMADD_SIZE_8BIT,
+                                               &val, 1));
 }
 
 static BMP388_Status_t BMP388_ReadRegs(uint8_t reg, uint8_t *buf, uint16_t len){

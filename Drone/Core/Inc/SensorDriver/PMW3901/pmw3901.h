@@ -27,6 +27,6 @@ extern PMW3901_Handle_t pmw3901;
 
 PMW3901_Status_t PMW3901_Init(void);
 PMW3901_Status_t PMW3901_Read(void);
-void PMW3901_TxCallback(SPI_HandleTypeDef *hspi);
+void PMW3901_DMA_Callback(SPI_HandleTypeDef *hspi);
 
 #endif /* INC_SENSORDRIVER_PMW3901_PMW3901_H_ */

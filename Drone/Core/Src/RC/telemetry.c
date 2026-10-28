@@ -2,6 +2,9 @@
 
 #define TLM_RAD2DEG 			57.29578f
 #define TLM_ACCEL_G_PER_LSB		(12.0f / 32768.0f)
+#define TLM_FRESH_MS			100U		/* older sample: not valid any more */
+
+_Static_assert(sizeof(TLM_Sensor_t) <= 32, "an nRF24 ACK payload is 32 bytes at most");
 
 static int16_t TLM_S16(float v){
 	v = (v >= 0.0f) ? v + 0.5f : v - 0.5f;
@@ -15,6 +18,13 @@ static uint16_t TLM_U16(float v){
 	if(v > 65535.0f) return 65535;
 	if(v < 0.0f)     return 0;
 	return (uint16_t)v;
+}
+
+/* ms since a topic sample, 255 = no sample yet or older */
+static uint8_t TLM_AgeMs(uint32_t nowUs, uint32_t stampUs){
+	if(stampUs == 0) return 255;
+	uint32_t ms = (uint32_t)(nowUs - stampUs) / 1000U;
+	return (ms > 255U) ? 255 : (uint8_t)ms;
 }
 
 static uint8_t TLM_State(void){
@@ -110,6 +120,54 @@ static uint8_t TLM_BuildOutput(uint8_t *buf, uint8_t rcSeq, uint8_t state, uint1
 	return (uint8_t)sizeof(f);
 }
 
+static uint8_t TLM_BuildSensor(uint8_t *buf, uint8_t rcSeq, uint8_t state, const Altitude_Data_t *alt){
+	Range_Data_t    range = {0};
+	Flow_Data_t     flow  = {0};
+	Baro_Data_t     baro  = {0};
+	Attitude_Data_t att   = {0};
+
+	RangeTopic_Copy(&range, 0);
+	FlowTopic_Copy(&flow, 0);
+	BaroTopic_Copy(&baro, 0);
+	AttitudeTopic_Copy(&att);
+	uint32_t now = Time_Us();
+
+	/* body z seen from the earth frame: cos(roll) * cos(pitch) */
+	float tiltCos = att.q0*att.q0 - att.q1*att.q1 - att.q2*att.q2 + att.q3*att.q3;
+	if(tiltCos >  1.0f) tiltCos =  1.0f;
+	if(tiltCos < -1.0f) tiltCos = -1.0f;
+
+	uint8_t rangeAge = TLM_AgeMs(now, range.timestamp_us);
+	uint8_t flowAge  = TLM_AgeMs(now, flow.timestamp_us);
+	uint32_t flowDt  = flow.dt_us / 1000U;
+
+	TLM_Sensor_t f;
+	f.magic       = TLM_MAGIC;
+	f.type        = TLM_FRAME_SENSOR;
+	f.rcSeq       = rcSeq;
+	f.state       = state;
+	f.valid       = (alt->baroValid                               ? TLM_VALID_BARO       : 0) |
+	                ((range.valid && rangeAge < TLM_FRESH_MS)     ? TLM_VALID_RANGE      : 0) |
+	                ((flow.valid  && flowAge  < TLM_FRESH_MS)     ? TLM_VALID_FLOW       : 0) |
+	                (RangeFlow_RangeReady()                       ? TLM_VALID_RANGE_INIT : 0) |
+	                (RangeFlow_FlowReady()                        ? TLM_VALID_FLOW_INIT  : 0);
+	f.rangeStatus = (range.timestamp_us != 0) ? range.rangeStatus : 255;
+	f.rangeMm     = TLM_U16(range.distance_m * 1000.0f);
+	f.rangeHeight = TLM_S16(range.distance_m * tiltCos * 100.0f);
+	f.accelBias   = TLM_S16(alt->accelBias * 100.0f);
+	f.flowX       = flow.deltaX;
+	f.flowY       = flow.deltaY;
+	f.flowDtMs    = (uint8_t)((flowDt > 255U) ? 255U : flowDt);
+	f.squal       = flow.squal;
+	f.rangeAgeMs  = rangeAge;
+	f.flowAgeMs   = flowAge;
+	f.baroAgeMs   = TLM_AgeMs(now, baro.timestamp_us);
+	f.tiltDeg     = (uint8_t)(acosf(tiltCos) * TLM_RAD2DEG + 0.5f);
+
+	memcpy(buf, &f, sizeof(f));
+	return (uint8_t)sizeof(f);
+}
+
 uint8_t Telemetry_Build(uint8_t *buf, uint8_t rcSeq, uint16_t rcLost){
 	static uint8_t next = TLM_FRAME_ATTITUDE;
 
@@ -122,8 +180,12 @@ uint8_t Telemetry_Build(uint8_t *buf, uint8_t rcSeq, uint16_t rcLost){
 		len  = TLM_BuildAttitude(buf, rcSeq, state);
 		next = TLM_FRAME_OUTPUT;
 	}
-	else{
+	else if(next == TLM_FRAME_OUTPUT){
 		len  = TLM_BuildOutput(buf, rcSeq, state, rcLost, &alt, altValid);
+		next = TLM_FRAME_SENSOR;
+	}
+	else{
+		len  = TLM_BuildSensor(buf, rcSeq, state, &alt);
 		next = TLM_FRAME_ATTITUDE;
 	}
 	return len;

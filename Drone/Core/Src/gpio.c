@@ -54,7 +54,7 @@ void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(PMW3901_CS_GPIO_Port, PMW3901_CS_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, NR2401_CSN_Pin|CS_gyro_Pin|CS_accel_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, NR2401_CSN_Pin|CS_gyro_Pin|CS_accel_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(NRF2401_CE_GPIO_Port, NRF2401_CE_Pin, GPIO_PIN_RESET);

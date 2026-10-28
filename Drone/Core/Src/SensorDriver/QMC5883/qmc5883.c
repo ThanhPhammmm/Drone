@@ -40,8 +40,8 @@ static QMC5883_Status_t QMC5883_WaitDMA(HAL_StatusTypeDef started){
 
 static QMC5883_Status_t QMC5883_WriteReg(uint8_t reg, uint8_t val){
     QMC5883_ClearDMACompletion();
-    return QMC5883_WaitDMA(HAL_I2C_Mem_Write_DMA(&MAG_I2C, QMC5883_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
-                                                 &val, 1));
+    return QMC5883_WaitDMA(HAL_I2C_Mem_Write_IT(&MAG_I2C, QMC5883_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
+                                                &val, 1));
 }
 
 static QMC5883_Status_t QMC5883_ReadRegs(uint8_t reg, uint8_t *buf, uint16_t len){

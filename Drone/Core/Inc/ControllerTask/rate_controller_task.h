@@ -14,7 +14,7 @@
 #include "thrust_topic.h"
 #include "timebase.h"
 
-#define BALANCE_TEST	1
+#define BALANCE_TEST	0
 
 typedef struct {
 	float rollTorqueOutput;
