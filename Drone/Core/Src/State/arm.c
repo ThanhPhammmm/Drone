@@ -34,6 +34,7 @@ static Arm_Timer_t liftoffTimer;
 static Arm_Timer_t landedTimer;
 static Arm_Timer_t tumbleTimer;
 static uint8_t     tumbled				= 0;
+static uint8_t     takeoffLocked		= 0;	/* just landed: stick to the bottom before the next take-off */
 
 static uint8_t Arm_Hold(Arm_Timer_t *t, uint8_t condition, uint32_t now, uint32_t holdMs){
 	if(!condition){
@@ -62,7 +63,8 @@ static uint8_t Arm_Landed(const Arm_Input_t *in, uint32_t now){
 	if(limit < LANDING_THRUST_MAX) limit = LANDING_THRUST_MAX;
 
 	uint8_t thrustLow   = in->thrust <= limit;
-	uint8_t notDropping = fabsf(accelUpFiltered) <= LANDING_ACCEL_MAX;
+	/* the range sensor seeing the floor says it as well, and does not mind vibration */
+	uint8_t notDropping = fabsf(accelUpFiltered) <= LANDING_ACCEL_MAX || in->onFloor;
 	return Arm_Hold(&landedTimer, thrustLow && notDropping, now, LANDING_CONFIRM_MS);
 }
 
@@ -71,6 +73,7 @@ void Arm_Init(void){
 	armingTick			= 0;
 	accelUpFiltered		= 0.0f;
 	tumbled				= 0;
+	takeoffLocked		= 0;
 	tumbleTimer.running	= 0;
 	Arm_Enter(DISARMED);
 }
@@ -133,10 +136,11 @@ void Arm_Update(const Arm_Input_t *in){
 		break;
 
 	case ARMED_GROUND:
+		if(in->throttleLow) takeoffLocked = 0;
 		if(!in->armSwitch || !in->linkOk){
 			Arm_Enter(DISARMED);
 		}
-		else if(in->takeoffRequest){
+		else if(in->takeoffRequest && !takeoffLocked){
 			Arm_Enter(FLIGHT_TAKEOFF);
 		}
 		break;
@@ -179,6 +183,7 @@ void Arm_Update(const Arm_Input_t *in){
 			Arm_Enter(AIRBORNE);
 		}
 		else if(Arm_Landed(in, now)){
+			takeoffLocked = 1;
 			Arm_Enter(ARMED_GROUND);
 		}
 		break;

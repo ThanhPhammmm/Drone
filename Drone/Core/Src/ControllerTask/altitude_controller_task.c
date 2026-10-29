@@ -4,16 +4,23 @@
 #define ALT_CTRL_PERIOD_MS      (1000 / ALT_CTRL_RATE_HZ)
 #define dt_MAX                  0.05f   /* s, cap after a long stall */
 
-#define ALT_KP                  1.0f    /* Not yet done, need to do inspection*/
+#define ALT_KP                  1.0f    /* 1/s: height error -> climb speed */
 #define ALT_VZ_LIMIT            2.0f    /* m/s */
 #define ALT_TARGET_MAX_ERROR    3.0f    /* m, stops the target running away */
 
-#define VZ_KP                   0.15f   /* Not yet done, need to do inspection*/
-#define VZ_KI                   0.10f   /* Not yet done, need to do inspection*/
-#define VZ_KD                   0.0f    /* Not yet done, need to do inspection*/
-#define VZ_INTEGRAL_LIMIT       2.0f
-#define VZ_OUTPUT_LIMIT         0.50f	/* most the loop may move the thrust away from the hover thrust */
+/* Climb-speed loop. Its output is a part of the hover thrust (0.1 = 10 % more
+ * than hover), so the same gains suit a light and a heavy drone. */
+#define VZ_KP                   0.30f   /* per m/s */
+#define VZ_KI                   0.20f   /* per m */
+#define VZ_KD                   0.0f
+#define VZ_I_MAX                0.40f   /* the I-term moves the hover thrust by 40 % at most */
+#define VZ_OUTPUT_LIMIT         0.60f
 #define VZ_D_CUTOFF_HZ          10.0f
+
+/* Landing, when the range sensor sees the floor */
+#define LAND_SLOW_AGL           0.60f   /* m above the floor: from here down... */
+#define LAND_SLOW_VZ            0.40f   /* ...come down no faster than this, m/s */
+#define LAND_CUT_RATE           1.0f    /* standing on it: the thrust goes down by this part per s */
 
 #define THRUST_MIN              0.10f
 #define THRUST_MAX              0.85f
@@ -85,7 +92,7 @@ static void AltitudeController_EngageHold(const Altitude_Data_t *altitude, float
 void AltitudeControllerTask(void *argument){
 	AltitudeController_SetTaskHandle(xTaskGetCurrentTaskHandle());
 
-    PID_Init(&vzPID, VZ_KP, VZ_KI, VZ_KD, VZ_INTEGRAL_LIMIT, VZ_OUTPUT_LIMIT, VZ_D_CUTOFF_HZ);
+    PID_Init(&vzPID, VZ_KP, VZ_KI, VZ_KD, VZ_I_MAX / VZ_KI, VZ_OUTPUT_LIMIT, VZ_D_CUTOFF_HZ);
 	Altitude_Data_t         altitude = {0};
 	AltitudeSetpoint_Data_t setpoint = {0};
 	Attitude_Data_t         attitude = {0};
@@ -97,6 +104,7 @@ void AltitudeControllerTask(void *argument){
     uint8_t    takeoffClimb = 0;    /* ALT_HOLD take-off: still climbing to TAKEOFF_CLIMB_M */
     uint8_t    wasTakingOff = 0;    /* arm state was FLIGHT_TAKEOFF on the previous run */
     float      hoverRef     = 0.0f; /* published hover thrust (landing detector), 0 = not known */
+    float      landCut      = 1.0f; /* landing and standing on the floor: thrust taken down to this part */
 
     TickType_t last = xTaskGetTickCount();
     TickType_t lastRun = last;
@@ -119,7 +127,7 @@ void AltitudeControllerTask(void *argument){
         uint8_t altHold = (mode == FLIGHT_MODE_ALT_HOLD || mode == FLIGHT_MODE_POS_HOLD) &&
                           altitude.valid && Arm_IsAirborne();
 
-        float tiltComp = cosf(attitude.roll) * cosf(attitude.pitch);
+        float tiltComp = 1.0f - 2.0f * (attitude.q1 * attitude.q1 + attitude.q2 * attitude.q2);
         if(tiltComp < TILT_COMP_MIN) tiltComp = TILT_COMP_MIN;
 
         float thrust;
@@ -161,10 +169,15 @@ void AltitudeControllerTask(void *argument){
                 phase        = ALT_PHASE_HOLD;
                 spoolUp      = 0;
                 takeoffClimb = wasTakingOff;    /* straight from the take-off */
+                landCut      = 1.0f;
                 if(takeoffClimb) altitudeController.holdTarget += TAKEOFF_CLIMB_M;
             }
 
+            /* close to the floor: come down slowly, and do not let the target run ahead */
+            uint8_t nearFloor = altitude.aglValid && altitude.agl < LAND_SLOW_AGL;
+
             float climbRate = setpoint.climbRate;
+            if(nearFloor && climbRate < -LAND_SLOW_VZ) climbRate = -LAND_SLOW_VZ;
             if(takeoffClimb){
                 if(climbRate < 0.0f){
                     altitudeController.holdTarget = altitude.altitude;  /* the pilot takes over from here */
@@ -190,9 +203,18 @@ void AltitudeControllerTask(void *argument){
             float vzLimit = takeoffClimb ? TAKEOFF_CLIMB_VZ : ALT_VZ_LIMIT;
             if(vzSetpoint >  vzLimit)      vzSetpoint =  vzLimit;
             if(vzSetpoint < -ALT_VZ_LIMIT) vzSetpoint = -ALT_VZ_LIMIT;
+            if(nearFloor && vzSetpoint < -LAND_SLOW_VZ) vzSetpoint = -LAND_SLOW_VZ;
             altitudeController.vzSetpoint = vzSetpoint;
 
-            thrust = altitudeController.hoverThrust + PID_Update(&vzPID, vzSetpoint, altitude.verticalSpeed, dt);
+            /* landing and standing on the floor: the climb-speed error can never
+             * go away, so take the thrust down for the land detector in arm.c */
+            uint8_t touching = (armState == LANDING || armState == FAILSAFE) && altitude.onFloor && vzSetpoint < 0.0f;
+            landCut += (touching ? -LAND_CUT_RATE : LAND_CUT_RATE) * dt;
+            if(landCut < 0.0f) landCut = 0.0f;
+            if(landCut > 1.0f) landCut = 1.0f;
+
+            thrust = altitudeController.hoverThrust * landCut *
+                     (1.0f + PID_Update(&vzPID, vzSetpoint, altitude.verticalSpeed, dt));
             vzError = vzSetpoint - altitude.verticalSpeed;
 
             /* Increase thrust to compensate for the drone tilting */
@@ -231,7 +253,7 @@ void AltitudeControllerTask(void *argument){
         }
 
         if(armState == AIRBORNE){
-            if(phase == ALT_PHASE_HOLD) hoverRef = altitudeController.hoverThrust + vzPID.ki * vzPID.integral;
+            if(phase == ALT_PHASE_HOLD) hoverRef = altitudeController.hoverThrust * (1.0f + vzPID.ki * vzPID.integral);
             else if(hoverEstValid)      hoverRef = hoverEst;
         }
 
