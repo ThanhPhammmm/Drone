@@ -23,10 +23,10 @@
 #define RATE_MAX_PITCH				8.0f
 #define RATE_MAX_YAW				4.0f    /* ~229 deg/s */
 
-#define ATTITUDE_MAX_TILT			0.6f    /* ~34 deg */
-#define ATTITUDE_CTRL_PERIOD_MS		4       /* 250hz
+#define ATTITUDE_MAX_TILT			0.6f    /* ~34 deg, check rc_task.c accordingly */
+#define ATTITUDE_CTRL_RATE_HZ		250
+#define ATTITUDE_CTRL_PERIOD_MS		(1000 / ATTITUDE_CTRL_RATE_HZ)
 
- Hz */
 #define CLAMP(v, lo, hi)  ((v) < (lo) ? (lo) : ((v) > (hi) ? (hi) : (v)))
 
 AttitudeController_Handle_t attitudeController;

@@ -5,6 +5,8 @@
 #include "task.h"
 #include "altitude_topic.h"
 #include "baro_topic.h"
+#include "range_topic.h"
+#include "alttitude_kalman_filter.h"
 #include "Const.h"
 #include "attitude_topic.h"
 #include "timebase.h"

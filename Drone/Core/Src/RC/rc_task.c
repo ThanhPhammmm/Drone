@@ -9,7 +9,7 @@
 #define RC_FAILSAFE_DESCENT_MS      (-1.0f) /* m/s */
 #define RC_FAILSAFE_THRUST_SCALE    0.90f   /* blind descent if no baro */
 
-#define RC_MAX_TILT_RAD             0.35f   /* ~20 deg at full stick */
+#define RC_MAX_TILT_RAD             0.52f   /* ~30 deg at full stick, check attitude_controller_task.c accordingly */
 #define RC_HOLD_RELEASE_LOW         0.10f   /* ALT_HOLD waiting for a centred stick: this low = descend */
 #define RC_MAX_YAW_RATE             3.0f    /* rad/s */
 
@@ -128,6 +128,7 @@ void RCTask(void *argument){
         armIn.liftVz         = altNow.liftVz;
         armIn.accelUp        = altNow.accelUp;
         armIn.altitudeValid  = altValid;
+        armIn.onFloor        = altNow.onFloor;
         armIn.cosTilt        = cosTilt;
 
         Arm_Update(&armIn);

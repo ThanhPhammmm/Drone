@@ -13,11 +13,11 @@
 
 #define RATE_PID_KP_ROLL		0.0400f
 #define RATE_PID_KI_ROLL		0.0100f
-#define RATE_PID_KD_ROLL		0.00010f
+#define RATE_PID_KD_ROLL		0.00020f
 
 #define RATE_PID_KP_PITCH		0.0400f
 #define RATE_PID_KI_PITCH		0.0100f
-#define RATE_PID_KD_PITCH		0.00010f
+#define RATE_PID_KD_PITCH		0.00020f
 
 #define RATE_PID_KP_YAW			0.30f
 #define RATE_PID_KI_YAW   		0.10f

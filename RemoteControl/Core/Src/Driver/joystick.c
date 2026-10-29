@@ -11,7 +11,7 @@
 #define JOY_CENTER_SAMPLES      32
 #define JOY_CENTER_SAMPLE_MS    5
 
-#define JOY_DEADBAND            100.0f       /* raw counts around centre that read 0 (~2% of travel) */
+#define JOY_DEADBAND            200.0f       /* raw counts around centre that read 0 (~2% of travel) */
 #define JOY_DEFAULT_HALF_TRAVEL 1400.0f     /* raw counts for full deflection until the stick has gone further */
 
 #define JOY_TRIM_WINDOW         (2.0f * JOY_DEADBAND)
@@ -39,6 +39,9 @@ static JOY_Axis_t axisThrottle = { .ch = JOY_CH_THROTTLE, .fixedCenter = 1 };
 
 static TickType_t lastReadTick;
 static volatile uint16_t throttleRaw;       /* last averaged ADC count, for the stick check */
+static volatile uint16_t rollRaw;       /* last averaged ADC count, for the stick check */
+static volatile uint16_t pitchRaw;       /* last averaged ADC count, for the stick check */
+static volatile uint16_t yawRaw;       /* last averaged ADC count, for the stick check */
 
 static float JOY_Average(uint8_t ch){
     uint32_t acc = 0;
@@ -64,7 +67,20 @@ static int16_t JOY_Round(float v){
 
 static int16_t JOY_AxisRead(JOY_Axis_t *a, uint32_t dtMs){
     float raw = JOY_Average(a->ch);
-
+    switch (a->ch)
+    {
+    case JOY_CH_ROLL:
+        rollRaw = raw;
+        break;
+    case JOY_CH_PITCH:
+        pitchRaw = raw;
+        break;    
+    case JOY_CH_YAW:
+        yawRaw = raw;
+        break;
+    default:
+        break;
+    }
     if(raw < a->lo) a->lo = raw;
     if(raw > a->hi) a->hi = raw;
 
@@ -117,6 +133,16 @@ static uint16_t JOY_ThrottleRead(uint32_t dtMs){
 
 uint16_t JOY_ThrottleRaw(void){
     return throttleRaw;
+}
+
+uint16_t JOY_RollRaw(void){
+    return rollRaw;
+}
+uint16_t JOY_PitchRaw(void){
+    return pitchRaw;
+}
+uint16_t JOY_YawRaw(void){
+    return yawRaw;
 }
 
 void JOY_DMA_Callback(ADC_HandleTypeDef *hadc){
