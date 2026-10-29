@@ -128,6 +128,7 @@ void RCTask(void *argument){
         armIn.liftVz         = altNow.liftVz;
         armIn.accelUp        = altNow.accelUp;
         armIn.altitudeValid  = altValid;
+        armIn.onFloor        = altNow.onFloor;
         armIn.cosTilt        = cosTilt;
 
         Arm_Update(&armIn);

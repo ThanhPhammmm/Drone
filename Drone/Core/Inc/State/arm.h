@@ -35,6 +35,7 @@ typedef struct{
 	float    liftVz;			/* m/s up, accelerometer only: how fast it leaves the ground during the take-off */
 	float    accelUp;			/* m/s^2 up */
 	uint8_t  altitudeValid;
+	uint8_t  onFloor;			/* range sensor reads what it reads when landed */
 	float    cosTilt;			/* cos of the angle between body z and vertical (1 = level, <0 = upside down) */
 } Arm_Input_t;
 

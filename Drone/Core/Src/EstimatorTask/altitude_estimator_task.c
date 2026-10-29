@@ -1,24 +1,51 @@
 #include "altitude_estimator_task.h"
 
-#define ALT_EST_OMEGA               2.0f
-#define ALT_EST_K1                  (3.0f * ALT_EST_OMEGA)
-#define ALT_EST_K2                  (3.0f * ALT_EST_OMEGA * ALT_EST_OMEGA)
-#define ALT_EST_K3                  (ALT_EST_OMEGA * ALT_EST_OMEGA * ALT_EST_OMEGA)
-
 #define ALT_EST_BARO_MAX_AGE_US     30000
-#define ALT_EST_ACCEL_BIAS_LIMIT    2.0f      /* m/s^2 */
+#define ALT_EST_RANGE_MAX_AGE_US    60000
 
-#define ALT_EST_PERIOD_S            0.01f     /* run the observer on every 10 ms of samples */
+#define ALT_EST_PERIOD_S            0.01f     /* run the filter on every 10 ms of samples */
 #define ALT_EST_GAP_MAX_S           0.05f     /* longer gap between samples: start the window over */
-#define ALT_EST_BARO_LOSS_CYCLES    50U
+#define ALT_EST_LOSS_CYCLES         50U       /* 0.5 s with no height sensor: not valid */
+
+#define ALT_EST_RANGE_MIN_M         0.02f
+#define ALT_EST_RANGE_MAX_M         3.5f
+#define ALT_EST_RANGE_TILT_COS      0.866f    /* more than 30 deg of tilt: the beam misses the floor below */
+#define ALT_EST_RANGE_STD_M         0.03f     /* 1 sigma the filter gives a range height... */
+#define ALT_EST_RANGE_STD_PER_M     0.02f     /* ...plus this per metre: it gets noisier far away */
+#define ALT_EST_RANGE_REJECTS_MAX   10U       /* outliers in a row: the floor below changed height */
+#define ALT_EST_FLOOR_MARGIN_M      0.02f     /* range within this of the standing reading = on a floor */
+#define ALT_EST_FLOOR_FRESH_CYCLES  30U       /* range sample at most this old (x 10 ms) for onFloor: rides out a few invalid readings near the sensor minimum */
+#define ALT_EST_FLOOR_LIFT_VZ       0.05f     /* lift-off speed cap while the range says "on the floor" */
 
 #define LIFT_BASE_TAU_S             0.5f      /* s, standing reading, learned while the motors do not fly */
 #define LIFT_LEAK_TAU_S             1.0f      /* s, forgets a small accelerometer error instead of adding it up */
 
 AltitudeEstimator_Handle_t altitudeEstimator;
+static AltKF_t altKF;
 
 void AltitudeEstimator_SetTaskHandle(TaskHandle_t handle){
 	altitudeEstimator.altitudeTask = handle;
+}
+
+/* 1 = a new range sample that can be used; h = height above the floor below */
+static uint8_t AltEst_RangeHeight(const Attitude_Data_t *attitude, uint32_t *lastUs, float *h){
+    Range_Data_t range;
+    if(RangeTopic_Copy(&range, 0) != pdPASS || range.timestamp_us == 0) return 0;
+    if(range.timestamp_us == *lastUs) return 0;
+    *lastUs = range.timestamp_us;
+
+    int32_t age = Time_DiffUs(attitude->timestamp_us, range.timestamp_us);
+    if(age >= ALT_EST_RANGE_MAX_AGE_US || age <= -ALT_EST_RANGE_MAX_AGE_US) return 0;
+    if(!range.valid) return 0;
+    if(range.distance_m < ALT_EST_RANGE_MIN_M || range.distance_m > ALT_EST_RANGE_MAX_M) return 0;
+
+    /* body z seen from the earth frame: cos(roll) * cos(pitch) */
+    float tiltCos = attitude->q0*attitude->q0 - attitude->q1*attitude->q1
+                  - attitude->q2*attitude->q2 + attitude->q3*attitude->q3;
+    if(tiltCos < ALT_EST_RANGE_TILT_COS) return 0;
+
+    *h = range.distance_m * tiltCos;
+    return 1;
 }
 
 void AltitudeEstimatorTask(void *argument){
@@ -28,9 +55,20 @@ void AltitudeEstimatorTask(void *argument){
     Attitude_Data_t attitude;
     Baro_Data_t     baro;
 
-    float z = 0.0f, vz = 0.0f, accelBias = 0.0f;
-    uint8_t initialized = 0;
-    uint16_t baroLostCycles = 0;
+    uint8_t  initialized    = 0;
+    uint16_t lostCycles     = ALT_EST_LOSS_CYCLES;
+    uint32_t lastBaroUs     = 0;
+
+    uint32_t lastRangeUs    = 0;
+    uint8_t  rangeAnchored  = 0;
+    float    rangeOffset    = 0.0f;   /* m, z of the floor below: z = h + rangeOffset */
+    float    rangeStanding  = 0.0f;   /* m, h while standing: the sensor's own height */
+    uint8_t  rangeStandSet  = 0;
+    uint8_t  onFloor        = 0;
+    uint16_t rangeRejects   = 0;
+    uint16_t rangeUsedAgo   = ALT_EST_LOSS_CYCLES;   /* cycles since the filter took a range sample */
+    uint16_t rangeSeenAgo   = ALT_EST_LOSS_CYCLES;   /* cycles since a usable range sample came */
+    float    agl            = 0.0f;
 
     uint32_t lastSampleUs = 0;
     uint8_t  haveSample   = 0;
@@ -39,7 +77,8 @@ void AltitudeEstimatorTask(void *argument){
 
     float    liftBase     = 0.0f;   /* m/s^2, accelUp while standing */
     uint8_t  liftBaseSet  = 0;
-    float    liftVz       = 0.0f;   /* m/s, accelerometer-only lift-off speed */
+    float    liftVzRaw    = 0.0f;   /* m/s, accelerometer-only lift-off speed */
+    float    liftVz       = 0.0f;   /* the same, held down while the range sensor still reads the floor */
 
     while(1){
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
@@ -77,73 +116,111 @@ void AltitudeEstimatorTask(void *argument){
                 liftBaseSet = 1;
             }
             liftBase += (accelUp - liftBase) * dt / (LIFT_BASE_TAU_S + dt);
-            liftVz    = 0.0f;
+            liftVzRaw = 0.0f;
         }
         else if(!Arm_IsAirborne()){
-            liftVz += (accelUp - liftBase) * dt;
-            
-            /* If the aircraft only vibrates on the ground without taking off, 
-            integration errors can accumulate over time and falsely indicate 
-            that it is flying. A leak continuously reduces the accumulated 
+            liftVzRaw += (accelUp - liftBase) * dt;
+
+            /* If the aircraft only vibrates on the ground without taking off,
+            integration errors can accumulate over time and falsely indicate
+            that it is flying. A leak continuously reduces the accumulated
             value toward zero, cancelling out mechanical vibration effects.*/
-            liftVz -= liftVz * dt / LIFT_LEAK_TAU_S;
+            liftVzRaw -= liftVzRaw * dt / LIFT_LEAK_TAU_S;
         }
         else{
-            liftVz = 0.0f;
+            liftVzRaw = 0.0f;
         }
 
+        /* the range sensor still reads its standing height: not off the
+         * ground, whatever the vibration makes the accelerometer say */
+        liftVz = (onFloor && liftVzRaw > ALT_EST_FLOOR_LIFT_VZ) ? ALT_EST_FLOOR_LIFT_VZ : liftVzRaw;
+
+        /* baro: fresh = recent enough to call the height valid,
+         *       new   = a sample the filter has not used yet */
         uint8_t baroFresh = 0;
+        uint8_t baroNew   = 0;
         if(BaroTopic_Copy(&baro, 0) == pdPASS && baro.timestamp_us != 0){
             int32_t age = Time_DiffUs(attitude.timestamp_us, baro.timestamp_us);
             if(age < ALT_EST_BARO_MAX_AGE_US && age > -ALT_EST_BARO_MAX_AGE_US){
-                baroFresh = 1;
+                baroFresh  = 1;
+                baroNew    = (baro.timestamp_us != lastBaroUs);
+                lastBaroUs = baro.timestamp_us;
             }
         }
 
-        if(baroFresh) baroLostCycles = 0;
-        else if(baroLostCycles < ALT_EST_BARO_LOSS_CYCLES) baroLostCycles++;
+        float h = 0.0f;
+        uint8_t rangeNew = AltEst_RangeHeight(&attitude, &lastRangeUs, &h);
+
+        if(rangeUsedAgo < ALT_EST_LOSS_CYCLES) rangeUsedAgo++;
+        if(rangeSeenAgo < ALT_EST_LOSS_CYCLES) rangeSeenAgo++;
+        if(rangeNew){
+            rangeSeenAgo = 0;
+            agl = h;
+        }
 
         if(!initialized && baroFresh){
-            z         = baro.altitude_m;
-            vz        = 0.0f;
-            accelBias = 0.0f;
+            AltKF_Init(&altKF, baro.altitude_m);
             initialized = 1;
         }
 
         if(initialized){
-            float az = accelUp - accelBias;
+            uint8_t motors   = Arm_MotorsAllowed();
+            uint8_t airborne = Arm_IsAirborne();
 
-            if(baroFresh){
-                // observer error
-                // handle drift accelerometer
-                float err = baro.altitude_m - z;
+            /* the baro error (prop wash, drift) is only seen against a second
+             * height: learn it only while the motors run and the range sensor is in use */
+            AltKF_Predict(&altKF, accelUp, dt, motors && rangeUsedAgo < ALT_EST_LOSS_CYCLES);
 
-                z         += (vz + ALT_EST_K1 * err) * dt;
-                vz        += (az + ALT_EST_K2 * err) * dt;
-                accelBias += (-ALT_EST_K3 * err) * dt;
+            if(baroNew) AltKF_UpdateBaro(&altKF, baro.altitude_m);
+
+            if(rangeNew){
+                float z = AltKF_Get(&altKF, ALT_KF_Z);
+                if(!motors || !rangeAnchored){
+                    /* standing: z of the floor below is the z right now */
+                    rangeOffset   = z - h;
+                    rangeAnchored = 1;
+                    rangeRejects  = 0;
+                    if(!motors){
+                        rangeStanding = h;
+                        rangeStandSet = 1;
+                    }
+                }
+                else if(AltKF_UpdateRange(&altKF, h + rangeOffset, ALT_EST_RANGE_STD_M + ALT_EST_RANGE_STD_PER_M * h)){
+                    rangeRejects = 0;
+                    rangeUsedAgo = 0;
+                }
+                else if(++rangeRejects >= ALT_EST_RANGE_REJECTS_MAX){
+                    /* not a glitch, it keeps disagreeing: the floor below moved
+                     * (a table, a step). Follow the new floor without a jump. */
+                    rangeOffset  = z - h;
+                    rangeRejects = 0;
+                }
             }
-            else{
-                z  += vz * dt;
-                vz += az * dt;
+
+            if(!airborne){
+                AltKF_SetGround(&altKF, liftVz, liftBase);
             }
 
-            if(!Arm_IsAirborne()){
-                vz        = liftVz;
-                accelBias = liftBase;
-            }
-
-            if(accelBias >  ALT_EST_ACCEL_BIAS_LIMIT) accelBias =  ALT_EST_ACCEL_BIAS_LIMIT;
-            if(accelBias < -ALT_EST_ACCEL_BIAS_LIMIT) accelBias = -ALT_EST_ACCEL_BIAS_LIMIT;
+            if(baroNew || rangeUsedAgo == 0) lostCycles = 0;
+            else if(lostCycles < ALT_EST_LOSS_CYCLES) lostCycles++;
         }
 
+        onFloor = rangeStandSet && rangeSeenAgo < ALT_EST_FLOOR_FRESH_CYCLES &&
+                  agl < rangeStanding + ALT_EST_FLOOR_MARGIN_M;
+
         Altitude_Data_t *alt = &altitudeEstimator.data;
-        alt->altitude      = z;
-        alt->verticalSpeed = vz;
+        alt->altitude      = initialized ? AltKF_Get(&altKF, ALT_KF_Z)          : 0.0f;
+        alt->verticalSpeed = initialized ? AltKF_Get(&altKF, ALT_KF_VZ)         : 0.0f;
+        alt->accelBias     = initialized ? AltKF_Get(&altKF, ALT_KF_ACCEL_BIAS) : 0.0f;
+        alt->baroBias      = initialized ? AltKF_Get(&altKF, ALT_KF_BARO_BIAS)  : 0.0f;
         alt->accelUp       = accelUp;
-        alt->accelBias     = accelBias;
         alt->liftVz        = liftVz;
-        alt->valid         = initialized && (baroLostCycles < ALT_EST_BARO_LOSS_CYCLES);
+        alt->agl           = agl;
+        alt->aglValid      = (rangeSeenAgo < ALT_EST_LOSS_CYCLES);
+        alt->onFloor       = onFloor;
+        alt->valid         = initialized && (lostCycles < ALT_EST_LOSS_CYCLES);
         alt->baroValid     = baroFresh;
+        alt->rangeValid    = (rangeUsedAgo < ALT_EST_LOSS_CYCLES);
         alt->dt            = dt;
         alt->timestamp_us  = attitude.timestamp_us;
 

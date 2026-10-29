@@ -10,9 +10,14 @@ typedef struct{
     float accelUp;          /* m/s^2 */
     float accelBias;        /* m/s^2 */
     float liftVz;           /* m/s up, accelerometer only: how fast it leaves the ground during the take-off, else 0 */
+    float baroBias;         /* m, baro error learned from the range sensor */
+    float agl;              /* m, range sensor height above the floor below (tilt corrected) */
 
     uint8_t valid;
     uint8_t baroValid;
+    uint8_t rangeValid;     /* the filter used the range sensor lately */
+    uint8_t aglValid;       /* agl is a recent reading */
+    uint8_t onFloor;        /* range sensor reads what it reads when landed */
 
     float dt;
     uint32_t timestamp_us;
