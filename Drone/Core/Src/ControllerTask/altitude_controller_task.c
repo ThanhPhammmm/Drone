@@ -5,7 +5,7 @@
 #define dt_MAX                  0.05f   /* s, cap after a long stall */
 
 #define ALT_KP                  1.0f    /* 1/s: height error -> climb speed */
-#define ALT_VZ_LIMIT            2.0f    /* m/s */
+#define ALT_VZ_LIMIT            2.0f    /* m/s, fastest climb */
 #define ALT_TARGET_MAX_ERROR    3.0f    /* m, stops the target running away */
 
 /* Climb-speed loop. Its output is a part of the hover thrust (0.1 = 10 % more
@@ -17,9 +17,10 @@
 #define VZ_OUTPUT_LIMIT         0.60f
 #define VZ_D_CUTOFF_HZ          10.0f
 
-/* Landing, when the range sensor sees the floor */
-#define LAND_SLOW_AGL           0.60f   /* m above the floor: from here down... */
-#define LAND_SLOW_VZ            0.40f   /* ...come down no faster than this, m/s */
+#define DESCENT_VZ_PER_M        0.3f    /* 1/s: allowed descent speed per metre of height */
+#define DESCENT_VZ_MAX          1.0f    /* m/s, high up */
+#define DESCENT_VZ_MIN          0.1f    /* m/s, the touchdown speed */
+
 #define LAND_CUT_RATE           1.0f    /* standing on it: the thrust goes down by this part per s */
 
 #define THRUST_MIN              0.10f
@@ -29,6 +30,7 @@
 #define HOVER_EST_TAU_S         0.4f    /* s */
 #define HOVER_EST_ACCEL_MAX     4.0f    /* m/s^2, samples beyond (bumps, landing) are skipped */
 #define HOVER_EST_EXP           0.6f    /* thrust ~ command^1.6..1.8 for typical motors and props */
+
 #define HOVER_EST_LIFT_VZ       0.10f   /* m/s, accelerometer lift-off speed: off the ground */
 #define GRAVITY                 9.80665f
 
@@ -78,6 +80,13 @@ static void AltitudeController_LearnHover(const Altitude_Data_t *altitude, float
 	else{
 		hoverEst += (sample - hoverEst) * dt / (HOVER_EST_TAU_S + dt);
 	}
+}
+
+static float AltitudeController_DescentLimit(const Altitude_Data_t *altitude){
+	float v = DESCENT_VZ_PER_M * altitude->aboveFloor;
+	if(v < DESCENT_VZ_MIN) v = DESCENT_VZ_MIN;
+	if(v > DESCENT_VZ_MAX) v = DESCENT_VZ_MAX;
+	return v;
 }
 
 static void AltitudeController_EngageHold(const Altitude_Data_t *altitude, float thrustNow, float tiltComp){
@@ -179,11 +188,15 @@ void AltitudeControllerTask(void *argument){
                 if(takeoffClimb) altitudeController.holdTarget += TAKEOFF_CLIMB_M;
             }
 
-            /* close to the floor: come down slowly, and do not let the target run ahead */
-            uint8_t nearFloor = altitude.aglValid && altitude.agl < LAND_SLOW_AGL;
+            /* 
+                * Descent speed: the lower, the slower. 
+                * The stick below centre (or the failsafe) only says "come down": how far the
+                * stick goes does not matter, the speed comes from the height alone. 
+            */
+            float descentMax = AltitudeController_DescentLimit(&altitude);
 
             float climbRate = setpoint.climbRate;
-            if(nearFloor && climbRate < -LAND_SLOW_VZ) climbRate = -LAND_SLOW_VZ;
+            if(climbRate < 0.0f) climbRate = -descentMax;
             if(takeoffClimb){
                 if(climbRate < 0.0f){
                     altitudeController.holdTarget = altitude.altitude;  /* the pilot takes over from here */
@@ -207,9 +220,8 @@ void AltitudeControllerTask(void *argument){
             float vzSetpoint = ALT_KP * (altitudeController.holdTarget - altitude.altitude) + climbRate;
 
             float vzLimit = takeoffClimb ? TAKEOFF_CLIMB_VZ : ALT_VZ_LIMIT;
-            if(vzSetpoint >  vzLimit)      vzSetpoint =  vzLimit;
-            if(vzSetpoint < -ALT_VZ_LIMIT) vzSetpoint = -ALT_VZ_LIMIT;
-            if(nearFloor && vzSetpoint < -LAND_SLOW_VZ) vzSetpoint = -LAND_SLOW_VZ;
+            if(vzSetpoint >  vzLimit)       vzSetpoint =  vzLimit;
+            if(vzSetpoint < -descentMax)    vzSetpoint = -descentMax;;
             altitudeController.vzSetpoint = vzSetpoint;
 
             /* landing and standing on the floor: the climb-speed error can never

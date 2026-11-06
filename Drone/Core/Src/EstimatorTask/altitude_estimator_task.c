@@ -211,6 +211,8 @@ void AltitudeEstimatorTask(void *argument){
         alt->liftVz        = liftVz;
         alt->agl           = agl;
         alt->aglValid      = (rangeSeenAgo < ALT_EST_LOSS_CYCLES);
+        alt->aboveFloor    = alt->aglValid ? agl : alt->altitude - (rangeAnchored ? rangeOffset : 0.0f);
+        if(alt->aboveFloor < 0.0f) alt->aboveFloor = 0.0f;
         alt->onFloor       = onFloor;
         alt->valid         = initialized && (lostCycles < ALT_EST_LOSS_CYCLES);
         alt->baroValid     = baroFresh;

@@ -4,7 +4,7 @@ extern BMI088_Handle_t bmi088;
 extern volatile uint32_t gyro_dt;
 
 SemaphoreHandle_t imuDmaSem;
-#define GYRO_LPF_CUTOFF_HZ              60.0f   /* 80-100Hz */
+#define GYRO_LPF_CUTOFF_HZ              80.0f   /* 80-100Hz */
 #define GYRO_SAMPLE_RATE_HZ             1000.0f
 #define ACCEL_SAMPLE_RATE_HZ            800.0f
 #define ACCEL_LPF_CUTOFF_HZ             30.0f	/* 20-50Hz	*/
@@ -29,10 +29,8 @@ void IMUTask(void *argument){
     static uint32_t lastAccelCycles = 0;
     static uint8_t  gyroDtValid     = 0;
     static uint8_t  accelDtValid    = 0;
-    static float    accelDt         = 0.0f;
     static LPF_t gyroLPF[3];
     static Biquad_t accelLPF[3];
-	static uint8_t lpfInit = 0;
 
     LPF_Init(&gyroLPF[0], GYRO_LPF_CUTOFF_HZ);
     LPF_Init(&gyroLPF[1], GYRO_LPF_CUTOFF_HZ);

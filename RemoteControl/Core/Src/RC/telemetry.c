@@ -10,7 +10,9 @@
 #define TLM_PRINT_PERIOD_MS     200U         /* poll; one line per new output frame (25 Hz) */
 #define TLM_STALE_MS            500U
 #define TLM_HEADER_EVERY        250U        /* lines (~10 s), for a terminal opened late */
-#define TLM_DMA_TIMEOUT_MS      200U        /* a full 768-byte line takes ~67 ms at 115200 baud */
+#define TLM_DMA_TIMEOUT_MS      200U        /* a full 1024-byte line takes ~89 ms at 115200 baud */
+#define TLM_LINE_MAX            1024U       /* longest line today ~760 bytes (every field at its widest);
+                                             * nothing checks the length: count again when adding fields */
 
 /* Stick -> setpoint, the same scaling as the drone's rc_task.c
  * (RC_MAX_TILT_RAD, RC_MAX_YAW_RATE): keep the two in step. */
@@ -306,7 +308,7 @@ static uint16_t Telemetry_FormatLine(char *buf, const TLM_Attitude_t *a, const T
 }
 
 void TelemetryPrintTask(void *argument){
-    static char line[768];
+    static char line[TLM_LINE_MAX];
     tlmTask = xTaskGetCurrentTaskHandle();
     TLM_Write(tlmLegend, sizeof(tlmLegend) - 1);
 

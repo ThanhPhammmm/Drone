@@ -1,6 +1,13 @@
 # Build
 Debug/
 Release/
+1.Reference/
+2.Data/
+3.Test/
+4.TestSensors/
+5.Tools/
+6.Simulation/
+7.ESC_Calib/
 
 # Build artifacts
 *.o
