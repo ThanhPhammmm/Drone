@@ -12,7 +12,8 @@ typedef struct{
     float liftVz;           /* m/s up, accelerometer only: how fast it leaves the ground during the take-off, else 0 */
     float baroBias;         /* m */
     float agl;              /* m, range sensor height above the floor below (tilt corrected) */
-
+    float aboveFloor;       /* m, height above the floor: agl while the range sensor sees it, else from the altitude estimate */
+    
     uint8_t valid;
     uint8_t baroValid;
     uint8_t rangeValid;
