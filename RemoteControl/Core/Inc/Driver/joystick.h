@@ -35,7 +35,10 @@
 
 void JOY_Init(void);
 void JOY_Read(RC_Packet_t *pkt);
-uint16_t JOY_ThrottleRaw(void);     /* throttle ADC count 0..4095, before mapping */
+uint16_t JOY_ThrottleRaw(void);
+uint16_t JOY_RollRaw(void);
+uint16_t JOY_PitchRaw(void);
+uint16_t JOY_YawRaw(void);
 void JOY_DMA_Callback(ADC_HandleTypeDef *hadc1);
 
 #endif /* INC_DRIVER_JOYSTICK_H_ */

@@ -4,7 +4,7 @@ extern BMI088_Handle_t bmi088;
 extern volatile uint32_t gyro_dt;
 
 SemaphoreHandle_t imuDmaSem;
-#define GYRO_LPF_CUTOFF_HZ              80.0f   /* 80-100Hz */
+#define GYRO_LPF_CUTOFF_HZ              60.0f   /* 80-100Hz */
 #define GYRO_SAMPLE_RATE_HZ             1000.0f
 #define ACCEL_SAMPLE_RATE_HZ            800.0f
 #define ACCEL_LPF_CUTOFF_HZ             30.0f	/* 20-50Hz	*/
@@ -24,6 +24,24 @@ void IMUTask(void *argument){
         Calib_SetStatus(CALIB_SENSOR_BMI088, CALIB_NO_SENSOR);
         vTaskDelete(NULL);
     }
+
+    static uint32_t lastGyroCycles  = 0;
+    static uint32_t lastAccelCycles = 0;
+    static uint8_t  gyroDtValid     = 0;
+    static uint8_t  accelDtValid    = 0;
+    static float    accelDt         = 0.0f;
+    static LPF_t gyroLPF[3];
+    static Biquad_t accelLPF[3];
+	static uint8_t lpfInit = 0;
+
+    LPF_Init(&gyroLPF[0], GYRO_LPF_CUTOFF_HZ);
+    LPF_Init(&gyroLPF[1], GYRO_LPF_CUTOFF_HZ);
+    LPF_Init(&gyroLPF[2], GYRO_LPF_CUTOFF_HZ);
+
+    Biquad_InitLowpass(&accelLPF[0], ACCEL_LPF_CUTOFF_HZ, ACCEL_SAMPLE_RATE_HZ);
+    Biquad_InitLowpass(&accelLPF[1], ACCEL_LPF_CUTOFF_HZ, ACCEL_SAMPLE_RATE_HZ);
+    Biquad_InitLowpass(&accelLPF[2], ACCEL_LPF_CUTOFF_HZ, ACCEL_SAMPLE_RATE_HZ);
+
 #if CALIB_BMI088_RUN
     do{
         Calib_Start(CALIB_SENSOR_BMI088);
@@ -34,29 +52,8 @@ void IMUTask(void *argument){
                           CALIB_BMI088_ACCEL_BIAS_X, CALIB_BMI088_ACCEL_BIAS_Y, CALIB_BMI088_ACCEL_BIAS_Z);
     Calib_SetStatus(CALIB_SENSOR_BMI088, CALIB_STORED);
 #endif
-    static uint32_t lastGyroCycles  = 0;
-    static uint32_t lastAccelCycles = 0;
-    static uint8_t  gyroDtValid     = 0;
-    static uint8_t  accelDtValid    = 0;
-    static float    accelDt         = 0.0f;
-    static LPF_t gyroLPF[3];
-    static Biquad_t accelLPF[3];
-	static uint8_t lpfInit = 0;
     while(1){
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-        if(!lpfInit){
-            LPF_Init(&gyroLPF[0], GYRO_LPF_CUTOFF_HZ);
-            LPF_Init(&gyroLPF[1], GYRO_LPF_CUTOFF_HZ);
-            LPF_Init(&gyroLPF[2], GYRO_LPF_CUTOFF_HZ);
-
-            Biquad_InitLowpass(&accelLPF[0], ACCEL_LPF_CUTOFF_HZ, ACCEL_SAMPLE_RATE_HZ);
-            Biquad_InitLowpass(&accelLPF[1], ACCEL_LPF_CUTOFF_HZ, ACCEL_SAMPLE_RATE_HZ);
-            Biquad_InitLowpass(&accelLPF[2], ACCEL_LPF_CUTOFF_HZ, ACCEL_SAMPLE_RATE_HZ);
-
-            lpfInit = 1;
-        }
-
         bmi088.data.gyro_updated = false;
         bmi088.data.accel_updated = false;
 

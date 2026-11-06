@@ -12,6 +12,11 @@
 #define TLM_HEADER_EVERY        250U        /* lines (~10 s), for a terminal opened late */
 #define TLM_DMA_TIMEOUT_MS      200U        /* a full 768-byte line takes ~67 ms at 115200 baud */
 
+/* Stick -> setpoint, the same scaling as the drone's rc_task.c
+ * (RC_MAX_TILT_RAD, RC_MAX_YAW_RATE): keep the two in step. */
+#define TLM_RC_MAX_TILT_DEG     (0.52f * 57.29578f)     /* full stick = ~30 deg */
+#define TLM_RC_MAX_YAW_DPS      (3.0f  * 57.29578f)     /* full stick = ~172 deg/s */
+
 extern UART_HandleTypeDef huart1;
 
 Telemetry_t telemetry;
@@ -192,11 +197,6 @@ static const char tlmLegend[] =
     "# [FLOW] X/Y counts in the last sample, Dt ms it covers, Squal surface quality (>= 25 usable), Age ms, Ok: good and fresh\r\n"
     "# [RC]: what this remote commands now (RollSp/PitchSp deg, YawSp deg/s); [ATT] RollSp/PitchSp/YawSp: what the drone got\r\n";
 
-/* Stick -> setpoint, the same scaling as the drone's rc_task.c
- * (RC_MAX_TILT_RAD, RC_MAX_YAW_RATE): keep the two in step. */
-#define TLM_RC_MAX_TILT_DEG     (0.35f * 57.29578f)     /* full stick = ~20 deg */
-#define TLM_RC_MAX_YAW_DPS      (3.0f  * 57.29578f)     /* full stick = ~172 deg/s */
-
 static float TLM_StickNorm(int16_t v){
     float f = (float)v / (float)RC_CHANNEL_MAX;
     if(f >  1.0f) f =  1.0f;
@@ -220,6 +220,18 @@ static char *PutStick(char *p){
     p = PutStr(p, "/4095, ThrSent:");
     p = PutU32(p, st.lastSent.throttle);
     p = PutStr(p, "/1000");
+
+    p = PutStr(p, ", RollRaw:");
+    p = PutU32(p, JOY_RollRaw());
+    p = PutStr(p, "/4095");
+
+    p = PutStr(p, ", PitchRaw:");
+    p = PutU32(p, JOY_PitchRaw());
+    p = PutStr(p, "/4095");
+
+    p = PutStr(p, ", YawRaw:");
+    p = PutU32(p, JOY_YawRaw());
+    p = PutStr(p, "/4095");
     return p;
 }
 
@@ -256,7 +268,7 @@ static uint16_t Telemetry_FormatLine(char *buf, const TLM_Attitude_t *a, const T
     FIELD_LABELED(", Sat:", o->sat & 0x1F, 0);
     if(o->sat & TLM_SAT_TUMBLE) p = PutStr(p, " TUMBLE-CUT");
 
-    p = PutStr(p, " | [ALT] "); // <-- Đã sửa lỗi gõ nhầm ở đây
+    p = PutStr(p, " | [ALT] ");
     FIELD_LABELED("Alt:", o->altitude, 2);
     FIELD_LABELED(", Baro:", o->baroAltitude, 2);
     FIELD_LABELED(", Vz:", o->vz, 2);
