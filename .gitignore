@@ -1,6 +1,6 @@
 # Build
-/Drone/Debug/
-/Release/
+Debug/
+Release/
 
 # Build artifacts
 *.o
