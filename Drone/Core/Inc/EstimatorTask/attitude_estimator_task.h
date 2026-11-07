@@ -18,8 +18,13 @@
 
 /* ANGLE and ALT_HOLD never use the yaw angle (yaw is flown as a rate), so the
  * magnetometer can only hurt them: motor current bends its field right when
- * the throttle comes up. Enable for POS_HOLD, after a proper mag calibration. */
-#define ATT_EST_USE_MAG  (FlightMode_GetActive() == FLIGHT_MODE_POS_HOLD)
+ * the throttle comes up. Indoor POS_HOLD needs a steady heading, not a north:
+ * steel and wiring bend the field from place to place, and switching the
+ * compass on would turn the heading in one jump. So the heading is the gyro's
+ * only; it drifts slowly. 1 = use the compass (outdoors, after a calibration).
+ * A MAG_POS_HOLD mode would switch it on only there; the position estimator
+ * then has to turn its x/y (and the hold target) by the heading jump. */
+#define ATT_EST_USE_MAG  0
 
 typedef struct {
 	Attitude_Data_t data;

@@ -27,6 +27,12 @@
 #include "rate_controller_task.h"
 #include "flow_topic.h"
 #include "rangeflow_task.h"
+#include "position_topic.h"
+#include "gps_topic.h"
+#include "gps_task.h"
+#include "position_controller_task.h"
+#include "altitude_controller_task.h"
+#include "attitude_controller_task.h"
 
 uint8_t Telemetry_Build(uint8_t *buf, uint8_t rcSeq, uint16_t rcLost);
 

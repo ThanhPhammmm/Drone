@@ -45,12 +45,6 @@
 
 #define ALT_CTRL_COPY_TIMEOUT   pdMS_TO_TICKS(2)
 
-typedef enum{
-	ALT_PHASE_OFF = 0,		/* controllers do not own the motors: thrust 0 */
-	ALT_PHASE_MANUAL,		/* ANGLE, and every take-off: stick is collective thrust */
-	ALT_PHASE_HOLD			/* ALT_HOLD closed loop, once airborne */
-} AltPhase_t;
-
 AltitudeController_Handle_t altitudeController;
 
 static PID_t vzPID;

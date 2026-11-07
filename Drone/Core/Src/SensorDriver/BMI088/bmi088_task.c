@@ -26,13 +26,9 @@ void IMUTask(void *argument){
     }
 
     static uint32_t lastGyroCycles  = 0;
-    static uint32_t lastAccelCycles = 0;
     static uint8_t  gyroDtValid     = 0;
-    static uint8_t  accelDtValid    = 0;
-    static float    accelDt         = 0.0f;
     static LPF_t gyroLPF[3];
     static Biquad_t accelLPF[3];
-	static uint8_t lpfInit = 0;
 
     LPF_Init(&gyroLPF[0], GYRO_LPF_CUTOFF_HZ);
     LPF_Init(&gyroLPF[1], GYRO_LPF_CUTOFF_HZ);
@@ -73,14 +69,9 @@ void IMUTask(void *argument){
         }
         if(bmi088.accelReady){
         	bmi088.accelReady = false;
-        	uint32_t sampleCycles = bmi088.accelIrqCycles;
             if(BMI088_ReadAccel() != BMI088_OK) continue;
             BMI088_ParseAccel();
             bmi088.data.accel_updated = true;
-
-            accelDt = accelDtValid ? (float)(sampleCycles - lastAccelCycles) / (float)SystemCoreClock : 0.0f;
-            accelDtValid    = 1;
-            lastAccelCycles = sampleCycles;
         }
 
         //BMI088_Convert(); Comment for now

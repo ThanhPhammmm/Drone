@@ -22,6 +22,12 @@ typedef struct{
     float hoverThrust;      /* thrust (made vertical) that hovers, measured on the way up */
 } AltitudeController_Handle_t;
 
+typedef enum{
+	ALT_PHASE_OFF = 0,		/* controllers do not own the motors: thrust 0 */
+	ALT_PHASE_MANUAL,		/* ANGLE, and every take-off: stick is collective thrust */
+	ALT_PHASE_HOLD			/* ALT_HOLD closed loop, once airborne */
+} AltPhase_t;
+
 extern AltitudeController_Handle_t altitudeController;
 
 void AltitudeControllerTask(void *argument);

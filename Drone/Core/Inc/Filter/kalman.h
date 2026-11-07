@@ -29,8 +29,7 @@ typedef struct{
 } Kalman_t;
 
 void Kalman_Init(Kalman_t *kf, uint8_t n, const float *x0, const float *var0);
-void Kalman_Predict(Kalman_t *kf, const float F[KALMAN_MAX_N][KALMAN_MAX_N],
-                    const float Q[KALMAN_MAX_N][KALMAN_MAX_N]);
+void Kalman_Predict(Kalman_t *kf, const float F[KALMAN_MAX_N][KALMAN_MAX_N], const float Q[KALMAN_MAX_N][KALMAN_MAX_N]);
 
 /* z = H x + noise of variance R.
  * gate: largest accepted innovation^2 / S (9 = 3 sigma), 0 = accept all.
