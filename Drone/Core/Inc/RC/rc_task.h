@@ -19,6 +19,7 @@
 #include "timebase.h"
 #include "calibration.h"
 #include "thrust_topic.h"
+#include "position_topic.h"
 
 void RCTask(void *argument);
 

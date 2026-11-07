@@ -15,47 +15,48 @@ typedef struct{
     uint8_t  imuCalibrated;
     uint8_t  baroCalibrated;
     uint8_t  magCalibrated;
-    uint8_t  altitudeValid;
+
+    /* IMU */
+    float    gyro[3];           /* deg/s, roll/pitch/yaw rate */
+    float    accel[3];          /* m/s^2, x front, y right, z down */
 
     /* attitude loop */
     float    roll, pitch, yaw;  /* deg */
-    float    rollSp, pitchSp;   /* deg */
-    float    rate[3];           /* deg/s, roll pitch yaw */
-    float    rateSp[3];         /* deg/s */
-    float    torque[3];         /* rate PID output */
+    float    rollSp, pitchSp;   /* deg, the angle flown now */
+    float    yawRateSp;         /* deg/s */
+    uint8_t  tiltDeg;           /* deg from level */
 
     /* outputs */
     uint16_t motor[4];          /* us: M1 FR, M2 RR, M3 RL, M4 FL */
     float    thrust;            /* 0..1 */
     float    hoverThrust;       /* 0..1, measured in flight; 0 = not known yet */
-    uint8_t  saturation;        /* 1 roll/pitch cut, 2 yaw cut, 4 throttle at max, 8 throttle at min */
 
     /* altitude */
     float    altitude;          /* m */
-    float    baroAltitude;      /* m */
+    float    altitudeSp;        /* m, height it holds */
     float    verticalSpeed;     /* m/s */
     float    climbSp;           /* m/s */
     float    accelUp;           /* m/s^2 */
     float    accelBias;         /* m/s^2, altitude estimator's accel bias */
-    uint8_t  baroAgeMs;         /* since the last baro sample, 255 = none */
+    float    aboveFloor;        /* m, height above the floor */
 
-    /* range and flow sensors (sensor frame) */
+    /* position, level frame: x = the nose at power-up, y = its right */
+    float    x, y;              /* m */
+    float    xSp, ySp;          /* m, the spot it holds */
+    float    vx, vy;            /* m/s */
+
+    /* range and flow sensors */
     uint8_t  sensorValid;       /* TLM_VALID_ */
     uint8_t  rangeReady;        /* VL53L1X initialized */
     uint8_t  flowReady;         /* PMW3901 initialized */
     float    range;             /* m, ToF along the sensor axis */
     float    rangeHeight;       /* m, ToF tilt corrected */
     uint8_t  rangeStatus;       /* 0 ok, 1 sigma, 2 signal, 3 too close, 4 too far, 7 wrap, 255 none */
-    uint8_t  rangeAgeMs;
     int16_t  flowX, flowY;      /* counts in the last sample */
-    uint8_t  flowDtMs;
     uint8_t  squal;
-    uint8_t  flowAgeMs;
-    uint8_t  tiltDeg;
 
     /* health */
     float    vibration;         /* m/s^2 */
-    uint16_t rateDtMaxUs;
     uint16_t rcLost;
 } Telemetry_t;
 

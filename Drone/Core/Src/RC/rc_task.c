@@ -55,6 +55,7 @@ void RCTask(void *argument){
 
     Altitude_Data_t altNow    = {0};
     Thrust_Data_t   thrustNow = {0};
+    Position_Data_t posNow    = {0};
 
     while(1){
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(RC_TICK_MS));
@@ -93,12 +94,15 @@ void RCTask(void *argument){
 
         (void)AltitudeTopic_Copy(&altNow, 0);
         uint8_t altValid = altNow.valid;
+        (void)PositionTopic_Copy(&posNow);
+        uint8_t posValid = posNow.valid;
 
-        /* Flight mode actually flown. On link loss: ALT_HOLD descent if the
-         * altitude estimate is good, otherwise ANGLE with a blind thrust cut. */
+        /* Flight mode actually flown. On link loss: descend, holding the spot
+         * (POS_HOLD) if the flow sees the floor, else ALT_HOLD if the altitude
+         * estimate is good, otherwise ANGLE with a blind thrust cut. */
         FlightMode_t mode;
-        if(linkOk) mode = FlightMode_Resolve(latest.mode, altValid);
-        else       mode = altValid ? FLIGHT_MODE_ALT_HOLD : FLIGHT_MODE_ANGLE;
+        if(linkOk) mode = FlightMode_Resolve(latest.mode, altValid, posValid);
+        else       mode = FlightMode_Resolve(RC_MODE_POS_HOLD, altValid, posValid);
         rc.mode = (uint8_t)mode;
         FlightMode_SetActive(mode);
 
@@ -145,8 +149,9 @@ void RCTask(void *argument){
 
             switch(mode){
             case FLIGHT_MODE_POS_HOLD:
-                /* TODO: position controller publishes roll/pitch here instead of the
-                 * sticks (see flight_mode.c). Vertical axis is ALT_HOLD. */
+                /* roll/pitch: the position controller flies them (the sticks give
+                 * it a speed); the stick angles above only stand in when its
+                 * output stops. Vertical axis is ALT_HOLD. */
                 /* fall through */
             case FLIGHT_MODE_ALT_HOLD:
                 altSp.climbRate    = holdEngaged ? FlightMode_ClimbRate(climbStickThrottle) : 0.0f;

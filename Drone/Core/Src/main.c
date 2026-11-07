@@ -41,6 +41,8 @@
 #include "magbaro_task.h"
 #include "altitude_estimator_task.h"
 #include "altitude_controller_task.h"
+#include "position_estimator_task.h"
+#include "position_controller_task.h"
 #include "rc_task.h"
 #include "nrf24.h"
 #include "debug_task.h"
@@ -219,11 +221,13 @@ int main(void)
   App_Init();
 
 	xTaskCreate(IMUTask, "IMU", STACK_IMU, NULL, TASK_PRIO_IMU, &imuTaskHandle);
-	xTaskCreate(AttitudeEstimatorTask, "ATT", STACK_ATT_ESTIMATOR, NULL, TASK_PRIO_ATT_ESTIMATOR, NULL);
+	xTaskCreate(AttitudeEstimatorTask, "ATTEST", STACK_ATT_ESTIMATOR, NULL, TASK_PRIO_ATT_ESTIMATOR, NULL);
 	xTaskCreate(AttitudeControllerTask, "ATTCTRL", STACK_ATTITUDE_CTRL, NULL, TASK_PRIO_ATT_CTRL, NULL);
 	xTaskCreate(RateControllerTask, "RATECTRL", STACK_RATE, NULL, TASK_PRIO_RATE, NULL);
 	xTaskCreate(AltitudeEstimatorTask, "ALTEST", STACK_ALT_ESTIMATOR, NULL, TASK_PRIO_ALT_ESTIMATOR, NULL);
 	xTaskCreate(AltitudeControllerTask, "ALTCTRL", STACK_ALT_CTRL, NULL, TASK_PRIO_ALT_CTRL, NULL);
+  xTaskCreate(PositionEstimatorTask, "POSEST", STACK_POS_ESTIMATOR, NULL, TASK_PRIO_POS_ESTIMATOR, NULL);
+	xTaskCreate(PositionControllerTask, "POSCTRL", STACK_POS_CTRL, NULL, TASK_PRIO_POS_CTRL, NULL);
 	//xTaskCreate(MagTask, "MAG", STACK_MAG, NULL, TASK_PRIO_MAG, NULL);
 	xTaskCreate(MagBaroTask, "MAGBARO", STACK_MAGBARO, NULL, TASK_PRIO_MAGBARO, NULL);
 	xTaskCreate(RCTask, "RC", STACK_RC, NULL, TASK_PRIO_RC, NULL);

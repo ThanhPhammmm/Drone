@@ -14,6 +14,8 @@
 #include "altitude_setpoint_topic.h"
 #include "flow_topic.h"
 #include "range_topic.h"
+#include "position_topic.h"
+#include "tilt_topic.h"
 #include "actuator.h"
 
 #define TASK_PRIO_IMU               9
@@ -23,6 +25,9 @@
 
 #define TASK_PRIO_ALT_ESTIMATOR     5
 #define TASK_PRIO_ALT_CTRL          4
+
+#define TASK_PRIO_POS_ESTIMATOR     5
+#define TASK_PRIO_POS_CTRL          4
 
 #define TASK_PRIO_RC                3
 
@@ -42,6 +47,8 @@
 #define STACK_MAGBARO				512
 #define STACK_ALT_ESTIMATOR			512
 #define STACK_ALT_CTRL			    512
+#define STACK_POS_ESTIMATOR			512
+#define STACK_POS_CTRL				512
 #define STACK_RC					512
 #define STACK_RANGEFLOW				512
 
