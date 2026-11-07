@@ -28,6 +28,8 @@
 #include "flow_topic.h"
 #include "rangeflow_task.h"
 #include "position_topic.h"
+#include "gps_topic.h"
+#include "gps_task.h"
 #include "position_controller_task.h"
 #include "altitude_controller_task.h"
 #include "attitude_controller_task.h"

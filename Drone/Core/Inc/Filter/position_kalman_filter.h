@@ -7,7 +7,8 @@
  *   p          m      position
  *   v          m/s    velocity
  *   accelBias  m/s^2  error of the horizontal acceleration: a small attitude
- *                     error lets some gravity leak into it */
+ *                     error lets some gravity leak into it
+ * The flow measures v. The GPS measures v and p (H = [1 0 0]). */
 enum{
     POS_KF_P = 0,
     POS_KF_V,
@@ -21,7 +22,8 @@ typedef struct{
 
 void    PosKF_Init(PosKF_t *f, float p0);
 void    PosKF_Predict(PosKF_t *f, float accel, float dt);
-uint8_t PosKF_UpdateVelocity(PosKF_t *f, float v, float std, float gate);
+uint8_t PosKF_UpdateVelocity(PosKF_t *f, float v, float std, float gate);    /* 1 = used, 0 = outlier */
+uint8_t PosKF_UpdatePosition(PosKF_t *f, float p, float std, float gate);    /* 1 = used, 0 = outlier */
 void    PosKF_SetVelocity(PosKF_t *f, float v, float std);
 
 static inline float PosKF_Get(const PosKF_t *f, uint8_t i){ return f->kf.x[i]; }

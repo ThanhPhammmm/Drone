@@ -58,15 +58,10 @@ typedef struct{
 
 typedef enum{
     BMI088_OK = 0,
-
     BMI088_ERROR,
-
     BMI088_TIMEOUT,
-
     BMI088_INVALID_CHIP,
-
     BMI088_DMA_BUSY,
-
 } BMI088_Status_t;
 
 

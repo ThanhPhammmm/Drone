@@ -7,6 +7,7 @@
 _Static_assert(sizeof(TLM_Attitude_t) <= 32, "an nRF24 ACK payload is 32 bytes at most");
 _Static_assert(sizeof(TLM_Output_t)   <= 32, "an nRF24 ACK payload is 32 bytes at most");
 _Static_assert(sizeof(TLM_Sensor_t)   <= 32, "an nRF24 ACK payload is 32 bytes at most");
+_Static_assert(sizeof(TLM_Gps_t)      <= 32, "an nRF24 ACK payload is 32 bytes at most");
 
 static int16_t TLM_S16(float v){
 	v = (v >= 0.0f) ? v + 0.5f : v - 0.5f;
@@ -161,6 +162,42 @@ static uint8_t TLM_BuildSensor(uint8_t *buf, uint8_t rcSeq, uint8_t state, uint1
 	return (uint8_t)sizeof(f);
 }
 
+/* [GPS] */
+static uint8_t TLM_BuildGps(uint8_t *buf, uint8_t rcSeq, uint8_t state){
+	Gps_Data_t      g   = {0};
+	Position_Data_t pos = {0};
+
+	GpsTopic_Copy(&g, 0);
+	PositionTopic_Copy(&pos);
+
+	uint8_t status = g.fixType & TLM_GPS_FIX_MASK;
+	if(g.fixOk)         status |= TLM_GPS_FIX_OK;
+	if(Gps_Found())     status |= TLM_GPS_FOUND;
+	if(pos.gpsAligned)  status |= TLM_GPS_ALIGNED;
+	status |= (uint8_t)((pos.source << TLM_GPS_SOURCE_SHIFT) & TLM_GPS_SOURCE_MASK);
+
+	TLM_Gps_t f;
+	f.magic     = TLM_MAGIC;
+	f.type      = TLM_FRAME_GPS;
+	f.rcSeq     = rcSeq;
+	f.state     = state;
+	f.status    = status;
+	f.numSV     = g.numSV;
+	f.lat       = g.lat;
+	f.lon       = g.lon;
+	f.altMsl    = TLM_S16(g.altMsl * 10.0f);
+	f.hAcc      = TLM_U16(g.hAcc * 100.0f);
+	f.velN      = TLM_S16(g.velN * 100.0f);
+	f.velE      = TLM_S16(g.velE * 100.0f);
+	f.sAcc      = TLM_U16(g.sAcc * 100.0f);
+	f.yawOffset = TLM_S16(pos.gpsYawOffset * TLM_RAD2DEG * 100.0f);
+	f.gpsX      = TLM_S16(pos.gpsX * 100.0f);
+	f.gpsY      = TLM_S16(pos.gpsY * 100.0f);
+
+	memcpy(buf, &f, sizeof(f));
+	return (uint8_t)sizeof(f);
+}
+
 uint8_t Telemetry_Build(uint8_t *buf, uint8_t rcSeq, uint16_t rcLost){
 	static uint8_t next = TLM_FRAME_ATTITUDE;
 
@@ -175,8 +212,12 @@ uint8_t Telemetry_Build(uint8_t *buf, uint8_t rcSeq, uint16_t rcLost){
 		len  = TLM_BuildOutput(buf, rcSeq, state);
 		next = TLM_FRAME_SENSOR;
 	}
-	else{
+	else if(next == TLM_FRAME_SENSOR){
 		len  = TLM_BuildSensor(buf, rcSeq, state, rcLost);
+		next = TLM_FRAME_GPS;
+	}
+	else{
+		len  = TLM_BuildGps(buf, rcSeq, state);
 		next = TLM_FRAME_ATTITUDE;
 	}
 	return len;

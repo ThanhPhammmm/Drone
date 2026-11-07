@@ -48,6 +48,7 @@
 #include "debug_task.h"
 #include "bmp388.h"
 #include "rangeflow_task.h"
+#include "gps_task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -232,6 +233,7 @@ int main(void)
 	xTaskCreate(MagBaroTask, "MAGBARO", STACK_MAGBARO, NULL, TASK_PRIO_MAGBARO, NULL);
 	xTaskCreate(RCTask, "RC", STACK_RC, NULL, TASK_PRIO_RC, NULL);
 	xTaskCreate(RangeFlowTask, "RANGEFLOW", STACK_RANGEFLOW, NULL, TASK_PRIO_RANGEFLOW, NULL);
+  xTaskCreate(GpsTask, "GPS", STACK_GPS, NULL, TASK_PRIO_GPS, NULL);
 #if DEBUG_PRINT
 	xTaskCreate(DebugTask, "DEBUG", STACK_DEBUG, NULL, TASK_PRIO_DEBUG, NULL);
 #endif

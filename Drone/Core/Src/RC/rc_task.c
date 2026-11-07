@@ -98,8 +98,8 @@ void RCTask(void *argument){
         uint8_t posValid = posNow.valid;
 
         /* Flight mode actually flown. On link loss: descend, holding the spot
-         * (POS_HOLD) if the flow sees the floor, else ALT_HOLD if the altitude
-         * estimate is good, otherwise ANGLE with a blind thrust cut. */
+         * (POS_HOLD) if the flow or the GPS gives a position, else ALT_HOLD if
+         * the altitude estimate is good, otherwise ANGLE with a blind thrust cut. */
         FlightMode_t mode;
         if(linkOk) mode = FlightMode_Resolve(latest.mode, altValid, posValid);
         else       mode = FlightMode_Resolve(RC_MODE_POS_HOLD, altValid, posValid);

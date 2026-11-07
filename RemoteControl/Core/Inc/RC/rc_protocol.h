@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+/* NOTE: this file must stay byte-for-byte identical to
+ * Drone/Core/Inc/RC/rc_protocol.h on the drone side. If the drone-side
+ * protocol changes, copy it back over this file rather than editing the
+ * two independently. */
+
 
 #define RC_PACKET_MAGIC     0xA5
 
@@ -28,11 +33,12 @@ typedef struct __attribute__((packed)){
     uint8_t  flags;
 } RC_Packet_t;              /* 12 bytes */
 
-/* Telemetry: one frame per ACK (32 bytes at most), the three in turn */
+/* Telemetry: one frame per ACK (32 bytes at most), the four in turn */
 #define TLM_MAGIC               0x5A
 #define TLM_FRAME_ATTITUDE      0       /* [IMU] [ATT] */
 #define TLM_FRAME_OUTPUT        1       /* [MOT] [ALT] */
 #define TLM_FRAME_SENSOR        2       /* [POS] [TOF] [FLOW] [MISC] */
+#define TLM_FRAME_GPS           3       /* [GPS] */
 
 /* state byte */
 #define TLM_STATE_ARM_MASK      0x07    /* arm_state_t: 0 DISARMED .. 6 FAILSAFE */
@@ -97,5 +103,30 @@ typedef struct __attribute__((packed)){
     uint8_t  vibration;         /* | |raw accel| - 1 g | at the sample, 0.1 m/s^2 */
     uint16_t rcLost;            /* RC packets missed so far (seq gaps) */
 } TLM_Sensor_t;                 /* 30 bytes */
+
+/* status byte (GPS frame) */
+#define TLM_GPS_FIX_MASK        0x07    /* fix type: 0 none, 1 dead reckoning, 2 2D, 3 3D, 4 GNSS + DR, 5 time only */
+#define TLM_GPS_FIX_OK          0x08    /* the receiver trusts its fix */
+#define TLM_GPS_FOUND           0x10    /* the receiver answers on USART1 */
+#define TLM_GPS_ALIGNED         0x20    /* heading tied to north: the GPS can hold the position */
+#define TLM_GPS_SOURCE_SHIFT    6
+#define TLM_GPS_SOURCE_MASK     0xC0    /* what measures the position now: 0 none, 1 flow, 2 GPS */
+
+typedef struct __attribute__((packed)){
+    uint8_t  magic;
+    uint8_t  type;              /* TLM_FRAME_GPS */
+    uint8_t  rcSeq;
+    uint8_t  state;
+    uint8_t  status;            /* TLM_GPS_* */
+    uint8_t  numSV;             /* satellites used */
+    int32_t  lat;               /* 1e-7 deg */
+    int32_t  lon;               /* 1e-7 deg */
+    int16_t  altMsl;            /* 0.1 m above mean sea level */
+    uint16_t hAcc;              /* cm, horizontal accuracy the receiver reports */
+    int16_t  velN, velE;        /* cm/s */
+    uint16_t sAcc;              /* cm/s, speed accuracy the receiver reports */
+    int16_t  yawOffset;         /* 0.01 deg, from north to the level frame's x */
+    int16_t  gpsX, gpsY;        /* cm, the GPS fix in the level frame (0 until aligned): compare with x, y */
+} TLM_Gps_t;                    /* 30 bytes */
 
 #endif /* INC_RC_RC_PROTOCOL_H_ */

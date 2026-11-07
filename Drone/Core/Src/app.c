@@ -28,6 +28,7 @@ void App_Init(void){
     AltitudeSetpointTopic_Init();
     RangeTopic_Init();
     FlowTopic_Init();
+    GpsTopic_Init();
     PositionTopic_Init();
     TiltTopic_Init();
     Arm_Init();

@@ -58,6 +58,21 @@ typedef struct{
     /* health */
     float    vibration;         /* m/s^2 */
     uint16_t rcLost;
+
+    /* GPS */
+    uint8_t  gpsFound;          /* the receiver answers */
+    uint8_t  gpsFix;            /* 0 none, 2 2D, 3 3D, ... */
+    uint8_t  gpsFixOk;          /* the receiver trusts its fix */
+    uint8_t  gpsSats;
+    double   lat, lon;          /* deg */
+    float    altMsl;            /* m */
+    float    hAcc;              /* m */
+    float    velN, velE;        /* m/s */
+    float    sAcc;              /* m/s */
+    uint8_t  gpsAligned;        /* heading tied to north: the GPS can hold the position */
+    float    yawOffset;         /* deg, north -> level frame x */
+    float    gpsX, gpsY;        /* m, the GPS fix in the level frame */
+    uint8_t  posSource;         /* 0 none, 1 flow, 2 GPS */
 } Telemetry_t;
 
 extern Telemetry_t telemetry;

@@ -6,10 +6,19 @@
 #define POS_CTRL_VEL_MAX            1.0f    /* m/s at full stick */
 #define POS_CTRL_STICK_DEADBAND     0.05f   /* the remote has its own; this only stops stick noise */
 
+/* Flow (indoors, low): a clean, quick velocity */
 #define POS_CTRL_POS_KP             1.0f    /* 1/s: position error -> speed */
 #define POS_CTRL_VEL_KP             1.5f    /* m/s^2 per m/s; 2.0 swings when the flow scale is 40 % off (sim) */
-#define POS_CTRL_VEL_KI             0.5f    /* m/s^2 per m: holds against a steady push (draught, weight off centre) */
+#define POS_CTRL_VEL_KI             0.5f    /* 1/s: holds against a steady push (draught, weight off centre) */
 #define POS_CTRL_I_MAX              1.0f    /* m/s^2 the I-term may hold (~6 deg of tilt) */
+
+/* GPS (outdoors, high): the position wanders ~1 m and comes 0.15 s late, so
+ * softer; wind needs more I */
+#define POS_CTRL_GPS_POS_KP         0.5f
+#define POS_CTRL_GPS_VEL_KP         1.0f
+#define POS_CTRL_GPS_VEL_KI         0.3f
+#define POS_CTRL_GPS_I_MAX          1.5f    /* ~9 deg of tilt */
+
 #define POS_CTRL_ACCEL_MAX          2.5f    /* m/s^2, ~14 deg of tilt */
 #define POS_CTRL_TILT_MAX           0.30f   /* rad */
 
@@ -26,11 +35,21 @@ typedef enum{
 } PosPhase_t;
 
 typedef struct{
+	float posKp;
+	float velKp;
+	float velKi;
+	float iMax;
+} PosGains_t;
+
+static const PosGains_t gainsFlow = { POS_CTRL_POS_KP,     POS_CTRL_VEL_KP,     POS_CTRL_VEL_KI,     POS_CTRL_I_MAX     };
+static const PosGains_t gainsGps  = { POS_CTRL_GPS_POS_KP, POS_CTRL_GPS_VEL_KP, POS_CTRL_GPS_VEL_KI, POS_CTRL_GPS_I_MAX };
+
+typedef struct{
 	uint8_t    engaged;
 	PosPhase_t phase;
 	float      brakeTime;   /* s */
-	float      integralX;   /* m, velocity error added up */
-	float      integralY;
+	float      iAccelX;     /* m/s^2, the I-term (kept as an output, so a gain change does not make it jump) */
+	float      iAccelY;
 	uint32_t   lastUs;
 	RC_Data_t  rc;
 } PosCtrl_t;
@@ -99,11 +118,13 @@ static void PositionController_Step(void){
 		ctrl.engaged    = 1;
 		ctrl.phase      = POS_PHASE_BRAKE;
 		ctrl.brakeTime  = 0.0f;
-		ctrl.integralX  = 0.0f;
-		ctrl.integralY  = 0.0f;
+		ctrl.iAccelX    = 0.0f;
+		ctrl.iAccelY    = 0.0f;
 		positionController.targetX = pos.x;
 		positionController.targetY = pos.y;
 	}
+
+	const PosGains_t *k = (pos.source == POS_SOURCE_GPS) ? &gainsGps : &gainsFlow;
 
 	float sFwd   = PositionController_Stick(-ctrl.rc.pitch);
 	float sRight = PositionController_Stick( ctrl.rc.roll);
@@ -138,8 +159,8 @@ static void PositionController_Step(void){
 			}
 		}
 		if(ctrl.phase == POS_PHASE_HOLD){
-			vxSp = POS_CTRL_POS_KP * (positionController.targetX - pos.x);
-			vySp = POS_CTRL_POS_KP * (positionController.targetY - pos.y);
+			vxSp = k->posKp * (positionController.targetX - pos.x);
+			vySp = k->posKp * (positionController.targetY - pos.y);
 			PositionController_Limit(&vxSp, &vySp, POS_CTRL_VEL_MAX);
 		}
 	}
@@ -149,11 +170,11 @@ static void PositionController_Step(void){
 	/* speed PI -> acceleration, level frame */
 	float ex = vxSp - pos.vx;
 	float ey = vySp - pos.vy;
-	ctrl.integralX = PositionController_Clamp(ctrl.integralX + ex * dt, POS_CTRL_I_MAX / POS_CTRL_VEL_KI);
-	ctrl.integralY = PositionController_Clamp(ctrl.integralY + ey * dt, POS_CTRL_I_MAX / POS_CTRL_VEL_KI);
+	ctrl.iAccelX = PositionController_Clamp(ctrl.iAccelX + k->velKi * ex * dt, k->iMax);
+	ctrl.iAccelY = PositionController_Clamp(ctrl.iAccelY + k->velKi * ey * dt, k->iMax);
 
-	float ax = POS_CTRL_VEL_KP * ex + POS_CTRL_VEL_KI * ctrl.integralX;
-	float ay = POS_CTRL_VEL_KP * ey + POS_CTRL_VEL_KI * ctrl.integralY;
+	float ax = k->velKp * ex + ctrl.iAccelX;
+	float ay = k->velKp * ey + ctrl.iAccelY;
 	PositionController_Limit(&ax, &ay, POS_CTRL_ACCEL_MAX);
 
 	/* level frame -> heading frame, then the tilt that gives that acceleration */

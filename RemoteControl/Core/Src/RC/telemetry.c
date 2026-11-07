@@ -9,8 +9,8 @@
 
 #define TLM_PRINT_PERIOD_MS     200U         /* poll; one line per new output frame (25 Hz) */
 #define TLM_STALE_MS            500U
-#define TLM_DMA_TIMEOUT_MS      200U        /* a full 1024-byte line takes ~89 ms at 115200 baud */
-#define TLM_LINE_MAX            1024U       /* longest line today ~860 bytes (every field at its widest);
+#define TLM_DMA_TIMEOUT_MS      200U        /* a full 1280-byte line takes ~111 ms at 115200 baud */
+#define TLM_LINE_MAX            1280U       /* longest line today ~1050 bytes (every field at its widest);
                                              * nothing checks the length: count again when adding fields */
 
 /* Stick -> setpoint, the same scaling as the drone's rc_task.c
@@ -27,6 +27,7 @@ static TLM_Output_t   rawOut;
 static TLM_Sensor_t   rawSen = {             /* "no sample" until the first sensor frame */
     .rangeStatus = 255,
 };
+static TLM_Gps_t      rawGps;
 static uint32_t       outCount;
 static uint8_t        linkPct;
 static uint64_t       linkHistory;          /* 1 bit per packet, newest in bit 0 */
@@ -118,6 +119,32 @@ void Telemetry_Decode(const uint8_t *buf, uint8_t len){
         telemetry.vibration     = f.vibration * 0.1f;
         telemetry.rcLost        = f.rcLost;
     }
+    else if(buf[1] == TLM_FRAME_GPS && len == sizeof(TLM_Gps_t)){
+        TLM_Gps_t f;
+        memcpy(&f, buf, sizeof(f));
+
+        taskENTER_CRITICAL();
+        rawGps = f;
+        taskEXIT_CRITICAL();
+
+        Telemetry_DecodeState(f.state);
+        telemetry.gpsFound      = (f.status & TLM_GPS_FOUND)   ? 1 : 0;
+        telemetry.gpsFix        =  f.status & TLM_GPS_FIX_MASK;
+        telemetry.gpsFixOk      = (f.status & TLM_GPS_FIX_OK)  ? 1 : 0;
+        telemetry.gpsAligned    = (f.status & TLM_GPS_ALIGNED) ? 1 : 0;
+        telemetry.posSource     = (f.status & TLM_GPS_SOURCE_MASK) >> TLM_GPS_SOURCE_SHIFT;
+        telemetry.gpsSats       = f.numSV;
+        telemetry.lat           = f.lat * 1e-7;
+        telemetry.lon           = f.lon * 1e-7;
+        telemetry.altMsl        = f.altMsl    * 0.1f;
+        telemetry.hAcc          = f.hAcc      * 0.01f;
+        telemetry.velN          = f.velN      * 0.01f;
+        telemetry.velE          = f.velE      * 0.01f;
+        telemetry.sAcc          = f.sAcc      * 0.01f;
+        telemetry.yawOffset     = f.yawOffset * 0.01f;
+        telemetry.gpsX          = f.gpsX      * 0.01f;
+        telemetry.gpsY          = f.gpsY      * 0.01f;
+    }
     else{
         return;
     }
@@ -134,7 +161,7 @@ static char *PutU32(char *p, uint32_t v){
 }
 
 static char *PutFixed(char *p, int32_t v, uint8_t decimals){
-    static const uint32_t pow10[] = { 1, 10, 100, 1000, 10000 };
+    static const uint32_t pow10[] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000 };   /* 7 decimals: lat/lon */
     uint32_t a = (v < 0) ? (uint32_t)(-v) : (uint32_t)v;
     if(v < 0) *p++ = '-';
     p = PutU32(p, a / pow10[decimals]);
@@ -181,14 +208,16 @@ static void TLM_Write(const char *s, uint16_t len){
 static const char tlmLegend[] =
     "# drone telemetry, one line per 200 ms\r\n"
     "# arm: 0 DISARMED 1 ARMING 2 ARMED_GROUND 3 TAKEOFF 4 AIRBORNE 5 LANDING 6 FAILSAFE\r\n"
-    "# mode: 0 ANGLE 1 ALT_HOLD 2 POS_HOLD | (IMU MAG BARO RANGE FLOW): sensor ready, noXXX = not. IMU/MAG/BARO calibrated, RANGE/FLOW initialized\r\n"
+    "# mode: 0 ANGLE 1 ALT_HOLD 2 POS_HOLD | (IMU MAG BARO RANGE FLOW GPS): sensor ready, noXXX = not. IMU/MAG/BARO calibrated, RANGE/FLOW initialized, GPS answering\r\n"
     "# [IMU] Gx/Gy/Gz deg/s (roll/pitch/yaw rate), Ax/Ay/Az m/s^2 (x front, y right, z down: still and level, Az = -9.81)\r\n"
     "# [ATT] deg. RollSp/PitchSp: angle flown now (sticks; the position controller in POS_HOLD), YawSp deg/s, Tilt deg from level\r\n"
     "# [MOT] us: M1 front-right, M2 rear-right, M3 rear-left, M4 front-left | Thr, Hover 0..1 (Hover 0 = not known yet)\r\n"
     "# [ALT] m, m/s, m/s^2. AltSp: height it holds, ClimbSp: what the stick asks, ABias: estimator accel bias, OverFloor: height above the floor\r\n"
-    "# [POS] m, m/s. X: the nose direction at power-up, Y: its right. XSp/YSp: the spot it holds in POS_HOLD\r\n"
+    "# [POS] m, m/s. X: the nose direction at power-up, Y: its right. XSp/YSp: the spot it holds in POS_HOLD. Src: what measures it now (NONE, FLOW, GPS)\r\n"
     "# [TOF] Dist m along the sensor, Height m tilt corrected, Status 0 ok 1 sigma 2 signal 3 too close 4 too far 7 wrap 255 none, Ok: valid and fresh\r\n"
     "# [FLOW] X/Y counts in the last sample (sensor axes), Squal surface quality (>= 25 usable), Ok: good and fresh\r\n"
+    "# [GPS] Fix 0 none 2 2D 3 3D, Ok: the receiver trusts it, Sats used, Lat/Lon deg, Alt m (sea level), HAcc m and SAcc m/s: accuracy the receiver reports,\r\n"
+    "#       VelN/VelE m/s, Align 1: heading tied to north (fly a few metres on the flow first), YawOff deg north -> X, GpsX/GpsY m: the GPS fix in the X/Y frame\r\n"
     "# [RC]: what this remote commands now (RollSp/PitchSp deg, YawSp deg/s)\r\n";
 
 static float TLM_StickNorm(int16_t v){
@@ -229,8 +258,16 @@ static char *PutStick(char *p){
     return p;
 }
 
+static const char *TLM_SourceName(uint8_t status){
+    switch((status & TLM_GPS_SOURCE_MASK) >> TLM_GPS_SOURCE_SHIFT){
+    case 1:  return "FLOW";
+    case 2:  return "GPS";
+    default: return "NONE";
+    }
+}
+
 static uint16_t Telemetry_FormatLine(char *buf, const TLM_Attitude_t *a, const TLM_Output_t *o,
-                                     const TLM_Sensor_t *s, uint8_t link){
+                                     const TLM_Sensor_t *s, const TLM_Gps_t *g, uint8_t link){
     char *p = buf;
 
     p = PutStr(p, "[SYS] ");
@@ -242,7 +279,8 @@ static uint16_t Telemetry_FormatLine(char *buf, const TLM_Attitude_t *a, const T
     p = PutStr(p, (o->state & TLM_STATE_MAG_CAL) ? " MAG"  : " noMAG");
     p = PutStr(p, ((o->state & TLM_STATE_BARO_CAL)) ? " BARO" : " noBARO");
     p = PutStr(p, (s->valid & TLM_VALID_RANGE_INIT) ? " RANGE" : " noRANGE");
-    p = PutStr(p, (s->valid & TLM_VALID_FLOW_INIT)  ? " FLOW)" : " noFLOW)");
+    p = PutStr(p, (s->valid & TLM_VALID_FLOW_INIT)  ? " FLOW" : " noFLOW");
+    p = PutStr(p, (g->status & TLM_GPS_FOUND)       ? " GPS)" : " noGPS)");
 
     p = PutStr(p, " | [IMU] ");
     FIELD_LABELED("Gx:", a->gyro[0], 1);
@@ -285,6 +323,8 @@ static uint16_t Telemetry_FormatLine(char *buf, const TLM_Attitude_t *a, const T
     FIELD_LABELED(", YSp:", s->ySp, 2);
     FIELD_LABELED(", Vx:", s->vx, 2);
     FIELD_LABELED(", Vy:", s->vy, 2);
+    p = PutStr(p, ", Src:");
+    p = PutStr(p, TLM_SourceName(g->status));
 
     p = PutStr(p, " | [TOF] ");
     FIELD_LABELED("Dist:", s->rangeMm, 3);
@@ -298,6 +338,22 @@ static uint16_t Telemetry_FormatLine(char *buf, const TLM_Attitude_t *a, const T
     FIELD_LABELED(", Y:", s->flowY, 0);
     FIELD_LABELED(", Squal:", s->squal, 0);
     FIELD_LABELED(", Ok:", (s->valid & TLM_VALID_FLOW) ? 1 : 0, 0);
+
+    p = PutStr(p, " | [GPS] ");
+    FIELD_LABELED("Fix:", g->status & TLM_GPS_FIX_MASK, 0);
+    FIELD_LABELED(", Ok:", (g->status & TLM_GPS_FIX_OK) ? 1 : 0, 0);
+    FIELD_LABELED(", Sats:", g->numSV, 0);
+    FIELD_LABELED(", Lat:", g->lat, 7);
+    FIELD_LABELED(", Lon:", g->lon, 7);
+    FIELD_LABELED(", Alt:", g->altMsl, 1);
+    FIELD_LABELED(", HAcc:", g->hAcc, 2);
+    FIELD_LABELED(", VelN:", g->velN, 2);
+    FIELD_LABELED(", VelE:", g->velE, 2);
+    FIELD_LABELED(", SAcc:", g->sAcc, 2);
+    FIELD_LABELED(", Align:", (g->status & TLM_GPS_ALIGNED) ? 1 : 0, 0);
+    FIELD_LABELED(", YawOff:", g->yawOffset, 2);
+    FIELD_LABELED(", GpsX:", g->gpsX, 2);
+    FIELD_LABELED(", GpsY:", g->gpsY, 2);
 
     p = PutStr(p, " | [MISC] ");
     FIELD_LABELED("Vib:", s->vibration, 1);
@@ -323,12 +379,14 @@ void TelemetryPrintTask(void *argument){
         TLM_Attitude_t a;
         TLM_Output_t   o;
         TLM_Sensor_t   s;
+        TLM_Gps_t      g;
         uint32_t       count;
-        
+
         taskENTER_CRITICAL();
         a     = rawAtt;
         o     = rawOut;
         s     = rawSen;
+        g     = rawGps;
         count = outCount;
         taskEXIT_CRITICAL();
 
@@ -337,7 +395,7 @@ void TelemetryPrintTask(void *argument){
         if(count != printed){
             printed = count;
             TLM_WaitIdle();     /* the last line may still be on the wire */
-            TLM_Write(line, Telemetry_FormatLine(line, &a, &o, &s, linkPct));
+            TLM_Write(line, Telemetry_FormatLine(line, &a, &o, &s, &g, linkPct));
         }
         else if((now - telemetry.lastFrameTick) > pdMS_TO_TICKS(TLM_STALE_MS) &&
                 (now - lastStale) > pdMS_TO_TICKS(1000)){

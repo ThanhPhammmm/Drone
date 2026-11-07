@@ -6,7 +6,9 @@
 #include "attitude_topic.h"
 #include "altitude_topic.h"
 #include "flow_topic.h"
+#include "gps_topic.h"
 #include "position_topic.h"
+#include "attitude_estimator_task.h"     /* modify ATT_EST_USE_MAG */
 #include "position_kalman_filter.h"
 #include "pmw3901.h"
 #include "Const.h"

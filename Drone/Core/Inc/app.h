@@ -14,6 +14,7 @@
 #include "altitude_setpoint_topic.h"
 #include "flow_topic.h"
 #include "range_topic.h"
+#include "gps_topic.h"
 #include "position_topic.h"
 #include "tilt_topic.h"
 #include "actuator.h"
@@ -33,6 +34,7 @@
 
 #define TASK_PRIO_MAGBARO           2
 #define TASK_PRIO_RANGEFLOW         2
+#define TASK_PRIO_GPS               2
 
 #define TASK_PRIO_MAG				1
 #define TASK_PRIO_DEBUG				1
@@ -51,6 +53,7 @@
 #define STACK_POS_CTRL				512
 #define STACK_RC					512
 #define STACK_RANGEFLOW				512
+#define STACK_GPS					512
 
 void App_Init(void);
 
