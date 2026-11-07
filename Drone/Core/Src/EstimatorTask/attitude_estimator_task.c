@@ -76,6 +76,38 @@ void AttitudeEstimatorTask(void *argument){
 
 		// altitude accelerometer calculation
 		// DCM(Direction Cosine Matrix)
+		/*
+			Body frame and earth frame:
+				Body frame is fixed to the drone: 
+					x = nose (front), 
+					y = right, 
+					z = down.
+				Earth frame is fixed to the room: 
+					x = where the nose pointed at power-up, 
+					y = to its right, 
+					z = straight down.
+
+			earth = R × body
+					| q0²+q1²−q2²−q3²    2(q1q2 − q0q3)     2(q1q3 + q0q2)  |
+			R  	=  	| 2(q1q2 + q0q3)     q0²−q1²+q2²−q3²    2(q2q3 − q0q1)  |
+					| 2(q1q3 − q0q2)     2(q2q3 + q0q1)     q0²−q1²−q2²+q3² |
+
+			A column is one body axis, as seen in the room.
+
+				Column				Body axis		Meaning
+				1 (R11, R21, R31)	nose 			where the nose points in the room
+				2 (R12, R22, R32)	right 			arm where the right side points
+				3 (R13, R23, R33)	body 			down where the drone’s belly points (thrust goes the other way)
+
+			A row is one room axis, as seen by the drone.
+
+				Row		Room axis
+				1		earth x
+				2		earth y
+				3		earth down
+		*/
+
+		/* the third DCM rows: vertical acceleration */
         float rx = 2.0f * (q1*q3 - q0*q2);
         float ry = 2.0f * (q0*q1 + q2*q3);
         float rz = q0*q0 - q1*q1 - q2*q2 + q3*q3;
@@ -83,6 +115,14 @@ void AttitudeEstimatorTask(void *argument){
         float fDown = rx*ax + ry*ay + rz*az;
 
         attitude->accelUp = -(fDown + BMI088_G);
+
+        /* the first two DCM rows: horizontal acceleration */
+        attitude->accelX = (q0*q0 + q1*q1 - q2*q2 - q3*q3) * ax
+                         + 2.0f * (q1*q2 - q0*q3) * ay
+                         + 2.0f * (q1*q3 + q0*q2) * az;
+        attitude->accelY = 2.0f * (q1*q2 + q0*q3) * ax
+                         + (q0*q0 - q1*q1 + q2*q2 - q3*q3) * ay
+                         + 2.0f * (q2*q3 - q0*q1) * az;
 
         attitude->dt = imu.dt;
 		attitude->timestamp_us = imu.timestamp_us;

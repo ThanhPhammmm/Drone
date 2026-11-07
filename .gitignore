@@ -8,6 +8,7 @@ Release/
 5.Tools/
 6.Simulation/
 7.ESC_Calib/
+8. REF code/
 
 # Build artifacts
 *.o

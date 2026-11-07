@@ -26,6 +26,7 @@
 #define ATTITUDE_MAX_TILT			0.6f    /* ~34 deg, check rc_task.c accordingly */
 #define ATTITUDE_CTRL_RATE_HZ		250
 #define ATTITUDE_CTRL_PERIOD_MS		(1000 / ATTITUDE_CTRL_RATE_HZ)
+#define ATTITUDE_TILT_MAX_AGE_US	50000   /* position controller output older than this: fly the sticks */
 
 #define CLAMP(v, lo, hi)  ((v) < (lo) ? (lo) : ((v) > (hi) ? (hi) : (v)))
 
@@ -35,11 +36,18 @@ void AttitudeController_SetTaskHandle(TaskHandle_t handle){
 	attitudeController.controllerTask = handle;
 }
 
+void AttitudeController_GetAngleSetpoint(float angle[2]){
+	angle[0] = attitudeController.rollSp;
+	angle[1] = attitudeController.pitchSp;
+}
+
 void AttitudeControllerTask(void *argument){
 	AttitudeController_SetTaskHandle(xTaskGetCurrentTaskHandle());
 
 	Attitude_Data_t attitude = {0};
 	AttitudeSetpoint_Data_t setpoint = {0};
+	Tilt_Data_t tilt = {0};
+	Tilt_Data_t tiltNow;
 
 	TickType_t last = xTaskGetTickCount();
 
@@ -49,16 +57,25 @@ void AttitudeControllerTask(void *argument){
 		if(AttitudeTopic_Copy(&attitude) != pdPASS) continue;
 		if(AttitudeSetpointTopic_Copy(&setpoint) != pdPASS) continue;
 
+		/* POS_HOLD: the position controller sets the tilt, the sticks only its speed */
+		if(TiltTopic_Copy(&tiltNow) == pdPASS) tilt = tiltNow;
+		int32_t tiltAge  = Time_DiffUs(attitude.timestamp_us, tilt.timestamp_us);
+		uint8_t usePosition = tilt.active && tiltAge < ATTITUDE_TILT_MAX_AGE_US && tiltAge > -ATTITUDE_TILT_MAX_AGE_US;
+
 		RateSetpoint_Data_t* rate = &attitudeController.data;
 
 		if(!Arm_MotorsAllowed()){
 			rate->rollRate  = 0.0f;
 			rate->pitchRate = 0.0f;
 			rate->yawRate   = 0.0f;
+			attitudeController.rollSp  = 0.0f;
+			attitudeController.pitchSp = 0.0f;
 		}
 		else{
-			float rollCmd  = CLAMP(setpoint.roll,  -ATTITUDE_MAX_TILT, ATTITUDE_MAX_TILT);
-			float pitchCmd = CLAMP(setpoint.pitch, -ATTITUDE_MAX_TILT, ATTITUDE_MAX_TILT);
+			float rollCmd  = CLAMP(usePosition ? tilt.roll  : setpoint.roll,  -ATTITUDE_MAX_TILT, ATTITUDE_MAX_TILT);
+			float pitchCmd = CLAMP(usePosition ? tilt.pitch : setpoint.pitch, -ATTITUDE_MAX_TILT, ATTITUDE_MAX_TILT);
+			attitudeController.rollSp  = rollCmd;
+			attitudeController.pitchSp = pitchCmd;
 
 			/* P controller: attitude error -> desired body rate */
 			rate->rollRate  = ATTITUDE_KP_ROLL  * (rollCmd  - attitude.roll);

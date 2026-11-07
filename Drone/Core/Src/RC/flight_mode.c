@@ -7,14 +7,13 @@
 #define FM_ALT_HOLD_DEADBAND		0.10f	/* fraction of the +-1 range around centre that means "hold" */
 #define FM_MAX_CLIMB_RATE			2.0f	/* m/s at full stick deflection */
 
-/*
- * POS_HOLD -- not implemented yet, it falls back to ALT_HOLD.
- */
 static volatile FlightMode_t activeMode = FLIGHT_MODE_ANGLE;
 
-FlightMode_t FlightMode_Resolve(uint8_t requested, uint8_t altitudeValid){
+FlightMode_t FlightMode_Resolve(uint8_t requested, uint8_t altitudeValid, uint8_t positionValid){
 	switch(requested){
-	case RC_MODE_POS_HOLD:		/* TODO: FLIGHT_MODE_POS_HOLD when a position estimate exists */
+	case RC_MODE_POS_HOLD:
+		if(altitudeValid && positionValid) return FLIGHT_MODE_POS_HOLD;
+		/* fall through */
 	case RC_MODE_ALT_HOLD:
 		return altitudeValid ? FLIGHT_MODE_ALT_HOLD : FLIGHT_MODE_ANGLE;
 

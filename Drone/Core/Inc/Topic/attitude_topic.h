@@ -16,7 +16,6 @@ typedef struct{
     float pitch;
     float yaw;
 
-    /* bias-corrected measured body rates (rad/s), fed to the rate controller */
     float rollRate;
     float pitchRate;
     float yawRate;
@@ -26,6 +25,8 @@ typedef struct{
     float gyroBiasZ;
 
     float accelUp;
+    float accelX;
+    float accelY;
 
     float dt;
 
