@@ -9,7 +9,7 @@
 
 /* Bauds the receiver may be at: ours if it kept running since the last
  * start, 9600 from the factory, the others some boards come set to. */
-static const uint32_t gpsBauds[] = { NEO_M8N_BAUD, 9600U, 38400U, 57600U };
+static const uint32_t gpsBauds[] = { 9600U, NEO_M8N_BAUD, 38400U, 57600U };
 
 static volatile uint8_t gpsFound;
 
@@ -47,14 +47,14 @@ static uint8_t Gps_WaitPvt(uint32_t ms){
 	return 0;
 }
 
-/* At each baud the receiver may be at: tell it to move to NEO_M8N_BAUD with
- * UBX only, follow it there, send the setup and wait for a NAV-PVT. */
 static uint8_t Gps_Find(void){
 	for(uint8_t i = 0; i < sizeof(gpsBauds) / sizeof(gpsBauds[0]); i++){
+		/* Talk to it at its current baud, dont know, so guess */
 		if(NEO_M8N_StartRx(gpsBauds[i]) != NEO_M8N_OK) return 0;
 		(void)NEO_M8N_SetPort();
 		vTaskDelay(pdMS_TO_TICKS(GPS_PORT_SWITCH_MS));
 
+		/* Follow it to the new baud */
 		if(NEO_M8N_StartRx(NEO_M8N_BAUD) != NEO_M8N_OK) return 0;
 		(void)NEO_M8N_Configure();
 		if(Gps_WaitPvt(GPS_FIRST_PVT_MS)) return 1;
@@ -64,7 +64,6 @@ static uint8_t Gps_Find(void){
 
 void GpsTask(void *argument){
 	vTaskDelay(pdMS_TO_TICKS(GPS_POWERUP_MS));
-
 	TickType_t lastPvt = xTaskGetTickCount();
 
 	while(1){

@@ -10,6 +10,9 @@
 #define NEO_M8N_BAUD            115200U     /* the receiver is switched to this */
 #define NEO_M8N_RATE_MS         200U        /* one solution every 200 ms (5 Hz) */
 #define NEO_M8N_RX_BUF_LEN      512U        /* 44 ms of bytes at 115200 baud: poll faster than that */
+#define NEO_M8N_TX_TIMEOUT_MS   100U        /* 44 bytes take 46 ms at 9600 baud */
+#define NEO_M8N_CFG_GAP_MS      20U         /* let the receiver take one setup message before the next */
+#define UBX_PAYLOAD_MAX         100U        /* longest message kept: NAV-PVT */
 
 typedef struct{
     NEO_M8N_Pvt_t pvt;              /* the last NAV-PVT */

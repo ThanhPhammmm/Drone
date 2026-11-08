@@ -88,9 +88,16 @@ void AttitudeEstimatorTask(void *argument){
 					z = straight down.
 
 			earth = R × body
-					| q0²+q1²−q2²−q3²    2(q1q2 − q0q3)     2(q1q3 + q0q2)  |
-			R  	=  	| 2(q1q2 + q0q3)     q0²−q1²+q2²−q3²    2(q2q3 − q0q1)  |
-					| 2(q1q3 − q0q2)     2(q2q3 + q0q1)     q0²−q1²−q2²+q3² |
+
+			
+						| cos(theta)cos(psi)	sin(phi)sin(theta)cos(psi) - cos(phi)sin(psi)	cos(phi)sin(theta)cos(psi) + sin(phi)sin(psi)  	|
+			Reuler  =  	| cos(theta)sin(psi)	sin(phi)sin(theta)sin(psi) + cos(phi)cos(psi)	cos(phi)sin(theta)sin(psi) - sin(phi)cos(psi)  	|
+						| -sin(theta)			sin(phi)cos(theta)								cos(phi)cos(theta) 								| 		
+
+
+								| q0²+q1²−q2²−q3²    2(q1q2 − q0q3)     2(q1q3 + q0q2)  |
+			Rquaternion  	=  	| 2(q1q2 + q0q3)     q0²−q1²+q2²−q3²    2(q2q3 − q0q1)  |
+								| 2(q1q3 − q0q2)     2(q2q3 + q0q1)     q0²−q1²−q2²+q3² |
 
 			A column is one body axis, as seen in the room.
 
@@ -101,10 +108,10 @@ void AttitudeEstimatorTask(void *argument){
 
 			A row is one room axis, as seen by the drone.
 
-				Row		Room axis
-				1		earth x
-				2		earth y
-				3		earth down
+				Row		Room 	axis
+				1		earth 	x
+				2		earth 	y
+				3		earth 	down
 		*/
 
 		/* the third DCM rows: vertical acceleration */

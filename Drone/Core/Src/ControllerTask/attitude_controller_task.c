@@ -27,8 +27,18 @@
 #define ATTITUDE_CTRL_RATE_HZ		250
 #define ATTITUDE_CTRL_PERIOD_MS		(1000 / ATTITUDE_CTRL_RATE_HZ)
 #define ATTITUDE_TILT_MAX_AGE_US	50000   /* position controller output older than this: fly the sticks */
+#define ATTITUDE_SOURCE_SLEW		1.0f    /* rad/s: after the tilt source changes (sticks <-> position
+                                             * controller), the angle moves to the new one this fast
+                                             * instead of jumping (17 deg in 0.3 s) */
 
 #define CLAMP(v, lo, hi)  ((v) < (lo) ? (lo) : ((v) > (hi) ? (hi) : (v)))
+
+/* v one step of at most `step` toward target */
+static float AttitudeController_Approach(float v, float target, float step){
+	if(target > v + step) return v + step;
+	if(target < v - step) return v - step;
+	return target;
+}
 
 AttitudeController_Handle_t attitudeController;
 
@@ -48,6 +58,12 @@ void AttitudeControllerTask(void *argument){
 	AttitudeSetpoint_Data_t setpoint = {0};
 	Tilt_Data_t tilt = {0};
 	Tilt_Data_t tiltNow;
+
+	uint8_t lastUsePosition = 0;
+	uint8_t easing          = 0;	/* source just changed: the angle is still moving over */
+	float   rollOut         = 0.0f;
+	float   pitchOut        = 0.0f;
+	const float slewStep    = ATTITUDE_SOURCE_SLEW * (float)ATTITUDE_CTRL_PERIOD_MS * 0.001f;
 
 	TickType_t last = xTaskGetTickCount();
 
@@ -70,10 +86,32 @@ void AttitudeControllerTask(void *argument){
 			rate->yawRate   = 0.0f;
 			attitudeController.rollSp  = 0.0f;
 			attitudeController.pitchSp = 0.0f;
+			lastUsePosition = usePosition;
+			easing          = 0;
+			rollOut         = 0.0f;
+			pitchOut        = 0.0f;
 		}
 		else{
-			float rollCmd  = CLAMP(usePosition ? tilt.roll  : setpoint.roll,  -ATTITUDE_MAX_TILT, ATTITUDE_MAX_TILT);
-			float pitchCmd = CLAMP(usePosition ? tilt.pitch : setpoint.pitch, -ATTITUDE_MAX_TILT, ATTITUDE_MAX_TILT);
+			float rollTarget  = CLAMP(usePosition ? tilt.roll  : setpoint.roll,  -ATTITUDE_MAX_TILT, ATTITUDE_MAX_TILT);
+			float pitchTarget = CLAMP(usePosition ? tilt.pitch : setpoint.pitch, -ATTITUDE_MAX_TILT, ATTITUDE_MAX_TILT);
+
+			/* Entering or leaving POS_HOLD: sticks and position controller may ask
+			 * for very different angles. Move over to the new one, do not jump. */
+			if(usePosition != lastUsePosition){
+				lastUsePosition = usePosition;
+				easing          = 1;
+			}
+			if(easing){
+				rollOut  = AttitudeController_Approach(rollOut,  rollTarget,  slewStep);
+				pitchOut = AttitudeController_Approach(pitchOut, pitchTarget, slewStep);
+				if(rollOut == rollTarget && pitchOut == pitchTarget) easing = 0;
+			}
+			else{
+				rollOut  = rollTarget;
+				pitchOut = pitchTarget;
+			}
+			float rollCmd  = rollOut;
+			float pitchCmd = pitchOut;
 			attitudeController.rollSp  = rollCmd;
 			attitudeController.pitchSp = pitchCmd;
 

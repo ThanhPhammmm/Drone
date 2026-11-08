@@ -4,17 +4,17 @@
 
 /* Sticks give a speed in the drone's own frame: forward / right, as in ANGLE */
 #define POS_CTRL_VEL_MAX            1.0f    /* m/s at full stick */
-#define POS_CTRL_STICK_DEADBAND     0.05f   /* the remote has its own; this only stops stick noise */
+#define POS_CTRL_STICK_DEADBAND     0.2f   /* the remote has its own; this only stops stick noise */
 
 /* Flow (indoors, low): a clean, quick velocity */
-#define POS_CTRL_FLOW_POS_KP             1.0f    /* 1/s: position error -> speed */
-#define POS_CTRL_FLOW_VEL_KP             1.5f    /* m/s^2 per m/s; 2.0 swings when the flow scale is 40 % off (sim) */
-#define POS_CTRL_FLOW_VEL_KI             0.5f    /* 1/s: holds against a steady push (draught, weight off centre) */
-#define POS_CTRL_FLOW_I_MAX              1.0f    /* m/s^2 the I-term may hold (~6 deg of tilt) */
+#define POS_CTRL_FLOW_POS_KP		1.0f    /* 1/s: position error -> speed */
+#define POS_CTRL_FLOW_VEL_KP		1.0f    /* m/s^2 per m/s; 2.0 swings when the flow scale is 40 % off (sim) */
+#define POS_CTRL_FLOW_VEL_KI		0.5f    /* 1/s: holds against a steady push (draught, weight off centre) */
+#define POS_CTRL_FLOW_I_MAX			1.0f    /* m/s^2 the I-term may hold (~6 deg of tilt) */
 
 /* GPS (outdoors, high): the position wanders ~1 m and comes 0.15 s late, so
  * softer; wind needs more I */
-#define POS_CTRL_GPS_POS_KP         0.5f
+#define POS_CTRL_GPS_POS_KP			0.5f
 #define POS_CTRL_GPS_VEL_KP         1.0f
 #define POS_CTRL_GPS_VEL_KI         0.3f
 #define POS_CTRL_GPS_I_MAX          1.5f    /* ~9 deg of tilt */
@@ -26,6 +26,10 @@
 #define POS_CTRL_BRAKE_MIN_S        0.5f    /* ...after braking this long: a quick flick ends before the drone gets going */
 #define POS_CTRL_BRAKE_MAX_S        2.0f    /* hold where it is after this long anyway */
 
+#define POS_CTRL_RESUME_S           3.0f    /* POS_HOLD back within this long (a short dropout)... */
+#define POS_CTRL_RESUME_DIST        1.0f    /* ...the drone this close (m) to the spot it held, and the
+                                             * sticks not touched meanwhile: hold that spot again */
+											
 #define GRAVITY                     9.80665f
 
 static const PosGains_t gainsFlow = { POS_CTRL_FLOW_POS_KP, POS_CTRL_FLOW_VEL_KP, POS_CTRL_FLOW_VEL_KI, POS_CTRL_FLOW_I_MAX };
@@ -78,6 +82,16 @@ static void PositionController_Step(void){
 
 	uint8_t active = (FlightMode_GetActive() == FLIGHT_MODE_POS_HOLD) && Arm_IsAirborne() && pos.valid;
 	if(!active){
+		if(ctrl.engaged){
+			/* just stopped (pilot switch, or the position dropped out): remember the spot */
+			ctrl.resumable = (ctrl.phase == POS_PHASE_HOLD);
+			ctrl.savedX    = positionController.targetX;
+			ctrl.savedY    = positionController.targetY;
+			ctrl.stoppedUs = pos.timestamp_us;
+		}
+		if(PositionController_Stick(-ctrl.rc.pitch) != 0.0f || PositionController_Stick(ctrl.rc.roll) != 0.0f){
+			ctrl.resumable = 0;     /* the pilot flew it somewhere else */
+		}
 		ctrl.engaged = 0;
 		out->roll    = 0.0f;
 		out->pitch   = 0.0f;
@@ -91,14 +105,26 @@ static void PositionController_Step(void){
 	}
 
 	if(!ctrl.engaged){
-		/* it may still be drifting when the hold starts: stop first, then hold */
-		ctrl.engaged    = 1;
-		ctrl.phase      = POS_PHASE_BRAKE;
-		ctrl.brakeTime  = 0.0f;
-		ctrl.iAccelX    = 0.0f;
-		ctrl.iAccelY    = 0.0f;
-		positionController.targetX = pos.x;
-		positionController.targetY = pos.y;
+		ctrl.engaged = 1;
+
+		float away   = sqrtf((pos.x - ctrl.savedX) * (pos.x - ctrl.savedX) + (pos.y - ctrl.savedY) * (pos.y - ctrl.savedY));
+		float offFor = (float)(uint32_t)(pos.timestamp_us - ctrl.stoppedUs) * 1e-6f;
+		if(ctrl.resumable && offFor < POS_CTRL_RESUME_S && away < POS_CTRL_RESUME_DIST){
+			/* back after a short break: hold the same spot, keep the I-term (wind) */
+			ctrl.phase = POS_PHASE_HOLD;
+			positionController.targetX = ctrl.savedX;
+			positionController.targetY = ctrl.savedY;
+		}
+		else{
+			/* it may still be drifting when the hold starts: stop first, then hold */
+			ctrl.phase      = POS_PHASE_BRAKE;
+			ctrl.brakeTime  = 0.0f;
+			ctrl.iAccelX    = 0.0f;
+			ctrl.iAccelY    = 0.0f;
+			positionController.targetX = pos.x;
+			positionController.targetY = pos.y;
+		}
+		ctrl.resumable = 0;
 	}
 
 	const PosGains_t *k = (pos.source == POS_SOURCE_GPS) ? &gainsGps : &gainsFlow;
@@ -124,8 +150,6 @@ static void PositionController_Step(void){
 			ctrl.brakeTime = 0.0f;
 		}
 		if(ctrl.phase == POS_PHASE_BRAKE){
-			/* speed setpoint 0 until it has nearly stopped: holding the spot where
-			 * the stick came back would pull it back there after the stop */
 			ctrl.brakeTime += dt;
 			float speed = sqrtf(pos.vx * pos.vx + pos.vy * pos.vy);
 			if((speed < POS_CTRL_STOPPED_VEL && ctrl.brakeTime > POS_CTRL_BRAKE_MIN_S) ||

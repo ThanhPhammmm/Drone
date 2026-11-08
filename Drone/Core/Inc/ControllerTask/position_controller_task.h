@@ -41,6 +41,10 @@ typedef struct{
 	float      iAccelX;     /* m/s^2, the I-term (kept as an output, so a gain change does not make it jump) */
 	float      iAccelY;
 	uint32_t   lastUs;
+	uint8_t    resumable;   /* it was holding a spot when POS_HOLD stopped, sticks untouched since */
+	float      savedX;      /* m, that spot */
+	float      savedY;
+	uint32_t   stoppedUs;   /* when POS_HOLD stopped */
 	RC_Data_t  rc;
 } PosCtrl_t;
 

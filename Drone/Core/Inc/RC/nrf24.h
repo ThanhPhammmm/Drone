@@ -28,6 +28,7 @@ typedef enum{
 } NRF24_Status_t;
 
 NRF24_Status_t NRF24_Init(void);
+NRF24_Status_t NRF24_Check(void);
 NRF24_Status_t NRF24_ReadPacket(RC_Packet_t *pkt);
 void NRF24_SetTaskHandle(TaskHandle_t handle);
 void NRF24_IRQ_Handler(void);

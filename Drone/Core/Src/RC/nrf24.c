@@ -157,6 +157,13 @@ NRF24_Status_t NRF24_Init(void){
     return NRF24_OK;
 }
 
+NRF24_Status_t NRF24_Check(void){
+    const uint8_t want = NRF24_CFG_PWR_UP | NRF24_CFG_PRIM_RX;
+    if(NRF24_ReadReg(NRF24_REG_RF_CH) != NRF24_CHANNEL) return NRF24_NOT_PRESENT;
+    if((NRF24_ReadReg(NRF24_REG_CONFIG) & want) != want) return NRF24_NOT_PRESENT;
+    return NRF24_OK;
+}
+
 NRF24_Status_t NRF24_ReadPacket(RC_Packet_t *pkt){
     if(NRF24_ReadReg(NRF24_REG_FIFO_STATUS) & NRF24_FIFO_RX_EMPTY){
         return NRF24_EMPTY;

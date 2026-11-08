@@ -21,6 +21,11 @@
 #include "thrust_topic.h"
 #include "position_topic.h"
 
+typedef struct{
+    uint8_t    wasValid;
+    TickType_t validSince;
+} RC_ValidTimer_t;
+
 void RCTask(void *argument);
 
 #endif /* INC_RC_RC_TASK_H_ */
