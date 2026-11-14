@@ -204,6 +204,12 @@ VL53L1X_Status_t VL53L1X_SetInterMeasurement(uint32_t ms){
     return VL53L1X_WriteDWord(VL53L1X_REG_SYSTEM_INTERMEASUREMENT_PERIOD, period);
 }
 
+/* The init waits here, 2 ms at a time. Weak: the task that owns the sensor can
+ * replace it and keep its other work going while the sensor comes up. */
+__attribute__((weak)) void VL53L1X_InitWait(void){
+    vTaskDelay(pdMS_TO_TICKS(2));
+}
+
 VL53L1X_Status_t VL53L1X_Init(void){
     if(vl53l1xDmaSem == NULL) vl53l1xDmaSem = xSemaphoreCreateBinary();
     if(vl53l1xDmaSem == NULL) return VL53L1X_ERROR;
@@ -212,15 +218,15 @@ VL53L1X_Status_t VL53L1X_Init(void){
     vl53l1x.distanceMode   = VL53L1X_DISTANCE_LONG;    /* what the default block sets */
     vl53l1x.timingBudgetMs = 0;
 
-    /* boot: the firmware sets bit 0 when it is ready; until then it may NACK */
-    uint8_t booted = 0;
-    for(uint16_t t = 0; t < VL53L1X_BOOT_TIMEOUT_MS && !booted; t += 2){
+    uint8_t    booted    = 0;
+    TickType_t bootStart = xTaskGetTickCount();
+    while(!booted && (TickType_t)(xTaskGetTickCount() - bootStart) < pdMS_TO_TICKS(VL53L1X_BOOT_TIMEOUT_MS)){
         uint8_t state = 0;
         if(VL53L1X_ReadByte(VL53L1X_REG_FIRMWARE_SYSTEM_STATUS, &state) == VL53L1X_OK && (state & 0x01)){
             booted = 1;
         }
         else{
-            vTaskDelay(pdMS_TO_TICKS(2));
+            VL53L1X_InitWait();
         }
     }
     if(!booted) return VL53L1X_TIMEOUT;
@@ -238,10 +244,11 @@ VL53L1X_Status_t VL53L1X_Init(void){
     vl53l1x.intActiveHigh = (mux & VL53L1X_GPIO_HV_MUX_ACTIVE_LOW) ? 0 : 1;
 
     if(VL53L1X_StartRanging() != VL53L1X_OK) return VL53L1X_ERROR;
-    uint8_t ready = 0;
-    for(uint16_t t = 0; t < VL53L1X_FIRST_DATA_MS && !ready; t += 2){
+    uint8_t    ready     = 0;
+    TickType_t dataStart = xTaskGetTickCount();
+    while(!ready && (TickType_t)(xTaskGetTickCount() - dataStart) < pdMS_TO_TICKS(VL53L1X_FIRST_DATA_MS)){
         ready = VL53L1X_DataReady();
-        if(!ready) vTaskDelay(pdMS_TO_TICKS(2));
+        if(!ready) VL53L1X_InitWait();
     }
     if(!ready) return VL53L1X_TIMEOUT;
     if(VL53L1X_ClearInterrupt() != VL53L1X_OK) return VL53L1X_ERROR;

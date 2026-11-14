@@ -14,7 +14,10 @@
 #define RC_MAX_YAW_RATE             3.0f    /* rad/s */
 #define RC_MODE_REENTRY_MS          1000U   /* an estimate that dropped out must be valid this long before
                                              * its hold mode is entered again (no flicking between modes) */
-#define RC_RADIO_CHECK_MS           1000U   /* no frame this long: check the radio this often, set it up again if needed */
+#define RC_RADIO_CHECK_MS           150U    /* no frame this long: check the radio this often, set it up again if needed.
+                                             * A radio that lost its settings in flight is back within ~0.4 s
+                                             * (this + the 0.2 s its init takes), before RC_TIMEOUT_MS calls the
+                                             * failsafe. At 1000 it was 1.2 s, and a descent every time */
 
 static RC_Data_t rc;
 
@@ -30,6 +33,7 @@ static float RC_Norm(int16_t v){
 
 static RC_ValidTimer_t altTimer;
 static RC_ValidTimer_t posTimer;
+static uint8_t         posDropped = 0;   /* the position estimate went away during this flight */
 
 static uint8_t RC_Usable(RC_ValidTimer_t *t, uint8_t valid, uint8_t inUse, TickType_t now){
     if(!valid){
@@ -84,7 +88,7 @@ void RCTask(void *argument){
         if((TickType_t)(tickNow - lastFrame) >= pdMS_TO_TICKS(RC_RADIO_CHECK_MS) &&
            (TickType_t)(tickNow - lastRadioCheck) >= pdMS_TO_TICKS(RC_RADIO_CHECK_MS)){
             lastRadioCheck = tickNow;
-            if(!radioOk || NRF24_Check() != NRF24_OK){
+            if(!radioOk || (NRF24_Check() != NRF24_OK && NRF24_Check() != NRF24_OK)){
                 radioOk = (NRF24_Init() == NRF24_OK);
             }
         }
@@ -129,7 +133,10 @@ void RCTask(void *argument){
         uint8_t altValid = RC_Usable(&altTimer, altNow.valid,
                                      activeNow == FLIGHT_MODE_ALT_HOLD || 
                                      activeNow == FLIGHT_MODE_POS_HOLD, now);
-        uint8_t posValid = RC_Usable(&posTimer, posNow.valid, activeNow == FLIGHT_MODE_POS_HOLD, now);
+        if(!Arm_IsAirborne())                        posDropped = 0;
+        else if(posTimer.wasValid && !posNow.valid)  posDropped = 1;
+        uint8_t posValid = RC_Usable(&posTimer, posNow.valid,
+                                     activeNow == FLIGHT_MODE_POS_HOLD || !posDropped, now);
 
         /* Flight mode actually flown. On link loss: descend, holding the spot
          * (POS_HOLD) if the flow or the GPS gives a position, else ALT_HOLD if

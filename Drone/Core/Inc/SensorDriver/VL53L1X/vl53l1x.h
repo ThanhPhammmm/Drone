@@ -29,7 +29,9 @@ typedef struct{
 
 extern VL53L1X_Handle_t vl53l1x;
 
-VL53L1X_Status_t VL53L1X_Init(void);    /* ends with the sensor ranging */
+VL53L1X_Status_t VL53L1X_Init(void);
+void VL53L1X_InitWait(void);            /* called every ~2 ms while the init waits for the sensor. It only sleeps;
+                                         * the task that owns the sensor may define its own and do its other work there */
 VL53L1X_Status_t VL53L1X_SetDistanceMode(VL53L1X_DistanceMode_t mode);
 VL53L1X_Status_t VL53L1X_SetTimingBudget(uint16_t ms);     /* 15 (short only), 20, 33, 50, 100, 200, 500 */
 VL53L1X_Status_t VL53L1X_SetInterMeasurement(uint32_t ms); /* >= the timing budget */
