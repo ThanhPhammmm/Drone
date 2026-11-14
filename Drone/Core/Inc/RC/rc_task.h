@@ -21,6 +21,8 @@
 #include "thrust_topic.h"
 #include "position_topic.h"
 
+#define NRF24_RECOVERY  1
+
 typedef struct{
     uint8_t    wasValid;
     TickType_t validSince;

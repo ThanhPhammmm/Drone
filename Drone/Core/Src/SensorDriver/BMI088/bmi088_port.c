@@ -31,8 +31,15 @@ void BMI088_GyroCS_High(void){
     HAL_GPIO_WritePin(GYRO_CS_GPIO_Port, GYRO_CS_Pin, GPIO_PIN_SET);
 }
 
+static void BMI088_SPI_Recover(void){
+    (void)HAL_SPI_Abort(&hspi1);
+    BMI088_ClearDMACompletion();
+}
+
 HAL_StatusTypeDef BMI088_SPI_TransmitReceive_DMA(uint8_t *tx, uint8_t *rx, uint16_t len){
-    return HAL_SPI_TransmitReceive_DMA(&hspi1, tx, rx, len);
+    HAL_StatusTypeDef ret = HAL_SPI_TransmitReceive_DMA(&hspi1, tx, rx, len);
+    if(ret != HAL_OK) BMI088_SPI_Recover();
+    return ret;
 }
 
 void BMI088_DMA_Callback(SPI_HandleTypeDef *hspi){
@@ -43,7 +50,7 @@ void BMI088_DMA_Callback(SPI_HandleTypeDef *hspi){
 
 BMI088_Status_t BMI088_WaitDMA(void){
     if(xSemaphoreTake(imuDmaSem, pdMS_TO_TICKS(BMI088_TIMEOUT_MS)) != pdTRUE){
-    	vTaskDelay(pdMS_TO_TICKS(50));
+        BMI088_SPI_Recover();
         return BMI088_TIMEOUT;
     }
 
@@ -128,7 +135,7 @@ BMI088_Status_t BMI088_Gyro_WriteReg(uint8_t reg, uint8_t data){
 
     BMI088_ClearDMACompletion();
     BMI088_GyroCS_Low();
-    if(HAL_SPI_TransmitReceive_DMA(&hspi1, txBuf, rxBuf, 2) != HAL_OK){
+    if(BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, 2) != HAL_OK){
         BMI088_GyroCS_High();
         return BMI088_ERROR;
     }
@@ -147,7 +154,7 @@ BMI088_Status_t BMI088_Gyro_ReadReg(uint8_t reg, uint8_t *data){
 
     BMI088_ClearDMACompletion();
     BMI088_GyroCS_Low();
-    if(HAL_SPI_TransmitReceive_DMA(&hspi1, txBuf, rxBuf, 2) != HAL_OK){
+    if(BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, 2) != HAL_OK){
         BMI088_GyroCS_High();
         return BMI088_ERROR;
     }
@@ -168,7 +175,7 @@ BMI088_Status_t BMI088_Gyro_ReadRegs(uint8_t reg, uint8_t *data, uint16_t len){
     memset(&txBuf[1], 0, len);
     BMI088_ClearDMACompletion();
     BMI088_GyroCS_Low();
-    if(HAL_SPI_TransmitReceive_DMA(&hspi1, txBuf, rxBuf, len + 1) != HAL_OK){
+    if(BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, len + 1) != HAL_OK){
         BMI088_GyroCS_High();
         return BMI088_ERROR;
     }

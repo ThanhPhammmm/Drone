@@ -1,7 +1,9 @@
 #include "rangeflow_task.h"
 
-#define RANGEFLOW_WAIT_MS          100     /* ToF gives ~30 Hz: a missed edge is picked up here */
+#define RANGEFLOW_WAIT_MS          40      /* ToF gives ~30 Hz: a missed edge is picked up here, and a ToF
+                                            * that has stopped still leaves the flow read at 25 Hz */
 #define RANGEFLOW_FLOW_ONLY_MS     20      /* no ToF: nothing wakes the task, read the flow at 50 Hz */
+#define RANGEFLOW_FLOW_MIN_US      15000U  /* while the ToF restarts: the flow is read this far apart at least */
 
 #define RANGEFLOW_POWERUP_MS       50      /* both sensors finish their power-on boot */
 #define RANGEFLOW_INIT_TRIES       5
@@ -65,6 +67,15 @@ static void RangeFlow_BusRecover(void){
     HAL_I2C_Init(&VL53L1X_I2C);
 }
 
+static void Flow_Update(void);
+
+static uint8_t flowDuringInit;
+
+void VL53L1X_InitWait(void){
+    vTaskDelay(pdMS_TO_TICKS(2));
+    if(flowDuringInit && (uint32_t)(Time_Us() - lastFlowUs) >= RANGEFLOW_FLOW_MIN_US) Flow_Update();
+}
+
 static void Range_Restart(void){
     HAL_I2C_DeInit(&VL53L1X_I2C);
     HAL_I2C_Init(&VL53L1X_I2C);
@@ -116,6 +127,7 @@ void RangeFlowTask(void *argument){
     }
     rangeReady = rangeOk;
     flowReady  = flowOk;
+    flowDuringInit = flowOk;        /* from here on a ToF restart keeps the flow going */
 
     if(!rangeOk && !flowOk){
         vTaskDelete(NULL);
@@ -136,6 +148,6 @@ void RangeFlowTask(void *argument){
                 rangeSeen = xTaskGetTickCount();
             }
         }
-        if(flowOk) Flow_Update();
+        if(flowOk && (uint32_t)(Time_Us() - lastFlowUs) >= RANGEFLOW_FLOW_MIN_US) Flow_Update();
     }
 }
