@@ -3,41 +3,16 @@
 #include "task.h"
 #include <string.h>
 
-#define UBX_PAYLOAD_MAX         100U        /* longest message kept: NAV-PVT */
 #define UBX_LENGTH_SANE         1024U       /* longer: a broken length, look for the next frame */
 #define UBX_TX_PAYLOAD_MAX      UBX_CFG_NAV5_LEN    /* longest message sent */
 #define UBX_TX_FRAME_MAX        (UBX_HEADER_LEN + UBX_TX_PAYLOAD_MAX + UBX_CHECKSUM_LEN)
-#define NEO_M8N_TX_TIMEOUT_MS   100U        /* 44 bytes take 46 ms at 9600 baud */
-#define NEO_M8N_CFG_GAP_MS      20U         /* let the receiver take one setup message before the next */
 
 NEO_M8N_Handle_t neoM8n;
 
 static volatile uint8_t rxBuf[NEO_M8N_RX_BUF_LEN];     /* filled by the DMA, round and round */
 static uint8_t txFrame[UBX_TX_FRAME_MAX];              /* read by the TX DMA: must outlive UBX_Send */
 static uint16_t rxRead;                                 /* next byte to parse */
-
-typedef enum{
-    UBX_WAIT_SYNC_1 = 0,
-    UBX_WAIT_SYNC_2,
-    UBX_WAIT_CLASS,
-    UBX_WAIT_ID,
-    UBX_WAIT_LEN_1,
-    UBX_WAIT_LEN_2,
-    UBX_WAIT_PAYLOAD,
-    UBX_WAIT_CK_A,
-    UBX_WAIT_CK_B
-} UbxState_t;
-
-static struct{
-    UbxState_t state;
-    uint8_t    cls;
-    uint8_t    id;
-    uint16_t   len;
-    uint16_t   count;
-    uint8_t    ckA;
-    uint8_t    ckB;
-    uint8_t    payload[UBX_PAYLOAD_MAX];
-} ubx;
+static UBX_Parser_t ubx;
 
 static uint16_t UBX_U2(const uint8_t *p){
     return (uint16_t)(p[0] | ((uint16_t)p[1] << 8));

@@ -22,13 +22,6 @@
 #define POS_EST_REJECTS_MAX         5U        /* outliers in a row: the filter is off, start over from the flow */
 #define POS_EST_GROUND_V_STD        0.05f     /* standing on the floor: v = 0, which lets the filter learn the accel bias */
 
-/* GPS (NEO-M8N), only when its fix is good. Without the flow (higher than
- * POS_EST_HEIGHT_MAX_M, or over a floor the flow cannot see) it measures
- * velocity and position. With the flow it only pulls the flow's slow drift
- * back, once the gap is bigger than the GPS's own accuracy. Its north/east must be turned into the
- * level frame, so the angle between the two is learned first: while the flow
- * is in use and the drone moves, the direction the GPS says it moves is
- * compared with the direction the flow says. No compass needed. */
 #define POS_EST_GPS_MAX_AGE_US      300000    /* a solution older than this: not used */
 #define POS_EST_GPS_DELAY_STEPS     15U       /* 150 ms: a solution describes the drone this long ago */
 #define POS_EST_GPS_SATS_MIN        6U
@@ -54,8 +47,6 @@
 #define POS_EST_EARTH_RADIUS_M      6371000.0f
 #define POS_EST_E7DEG_TO_RAD        (1e-7f * 0.017453293f)
 #define POS_EST_PI                  3.14159265f
-
-_Static_assert(POS_EST_HISTORY > POS_EST_GPS_DELAY_STEPS, "the history must cover the GPS delay");
 
 PositionEstimator_Handle_t positionEstimator;
 
@@ -86,16 +77,13 @@ static void PositionEstimator_Init(void){
 	PosKF_Init(&kfY, 0.0f);
 }
 
+/* keeps the result between −180° and +180° */
 static float PositionEstimator_Wrap(float a){
 	while(a >  POS_EST_PI) a -= 2.0f * POS_EST_PI;
 	while(a < -POS_EST_PI) a += 2.0f * POS_EST_PI;
 	return a;
 }
 
-/* Flow sample -> velocity in the level frame. 0 = it cannot be used.
- * The floor seems to move by (v / d) dt, d = distance along the lens axis,
- * plus the body's own turning: pitching nose up looks like flying forward,
- * rolling right like flying left. Those turns come from the gyro. */
 static uint8_t PositionEstimator_FlowVelocity(const Attitude_Data_t *att, const Flow_Data_t *flow,
                                              float rollTurn, float pitchTurn, float *vx, float *vy, float *std){
 	if(!flow->valid) return 0;
@@ -110,6 +98,8 @@ static uint8_t PositionEstimator_FlowVelocity(const Attitude_Data_t *att, const 
 	/* body z seen from the earth frame: cos(roll) * cos(pitch) */
 	float tiltCos = att->q0*att->q0 - att->q1*att->q1 - att->q2*att->q2 + att->q3*att->q3;
 	if(tiltCos < POS_EST_TILT_COS) return 0;
+	/* cos θ = agl / d, 
+	 * so d = agl / cos θ */
 	float d = alt.agl / tiltCos;
 
 #if POS_EST_FLOW_SWAP_XY
@@ -119,32 +109,43 @@ static uint8_t PositionEstimator_FlowVelocity(const Attitude_Data_t *att, const 
 	float countsFwd   = (float)flow->deltaX;
 	float countsRight = (float)flow->deltaY;
 #endif
+
+	/* remove the pitch and roll the camera saw */											
 	float angleFwd   = POS_EST_FLOW_FWD_SIGN   * countsFwd   * PMW3901_RAD_PER_COUNT - pitchTurn;
 	float angleRight = POS_EST_FLOW_RIGHT_SIGN * countsRight * PMW3901_RAD_PER_COUNT + rollTurn;
 
 	float dt     = (float)flow->dt_us * 1e-6f;
+	/* s = angle × height 
+	 * v = s / time */
 	float vFwd   = angleFwd   * d / dt;
 	float vRight = angleRight * d / dt;
 
 	/* heading frame -> level frame */
+	/* x part = cos ψ 
+	 * y part = sin ψ 
+	 * forward = ( cos ψ ,  sin ψ ) in (x, y)
+	 * right = ( cos(ψ+90°) , sin(ψ+90°) ) = ( −sin ψ , cos ψ )
+	 * v = vFwd · forward + vRight · right
+	 * [vx]   [cos ψ  −sin ψ] [vFwd]
+	 * [vy] = [sin ψ   cos ψ] [vRight] */
 	float c = cosf(att->yaw);
 	float s = sinf(att->yaw);
+	/* Rotate the flow velocity from the drone’s own directions (forward/right) 
+	 * into the fixed map directions (x/y) */
 	*vx  = c * vFwd - s * vRight;
 	*vy  = s * vFwd + c * vRight;
 	*std = POS_EST_FLOW_STD_MPS + POS_EST_FLOW_STD_PER_M * d;
 	return 1;
 }
 
-/* While the flow measures the velocity and the drone moves: the GPS velocity
- * points in north/east, the estimate's in the level frame. The angle between
- * the two is the heading offset. Averaged over a few solutions first, then
- * followed slowly (the gyro heading drifts ~2 deg/min). */
 static void PositionEstimator_Align(const Gps_Data_t *g, const PosHist_t *then, uint8_t flowFresh){
 	if(!flowFresh) return;
+	/* horizontal velocity */
 	float gpsSpeed = sqrtf(g->velN * g->velN + g->velE * g->velE);
 	float estSpeed = sqrtf(then->vx * then->vx + then->vy * then->vy);
 	if(gpsSpeed < POS_EST_ALIGN_SPEED || estSpeed < POS_EST_ALIGN_SPEED) return;
 
+	/* how much x is turned away from north */
 	float diff = PositionEstimator_Wrap(atan2f(g->velE, g->velN) - atan2f(then->vy, then->vx));
 	if(gps.aligned){
 		gps.yawOffset = PositionEstimator_Wrap(gps.yawOffset +
@@ -152,6 +153,7 @@ static void PositionEstimator_Align(const Gps_Data_t *g, const PosHist_t *then, 
 		return;
 	}
 
+	/* Put all 10 guesses as dots, then find their centre */
 	float w = (gpsSpeed < estSpeed) ? gpsSpeed : estSpeed;
 	gps.alignC += w * cosf(diff);
 	gps.alignS += w * sinf(diff);
@@ -172,8 +174,6 @@ static void PositionEstimator_Align(const Gps_Data_t *g, const PosHist_t *then, 
 	}
 }
 
-/* once per filter step: a new GPS solution, if one came. flowFresh: the flow
- * measured the velocity within POS_EST_GPS_TAKEOVER_CYCLES */
 static void PositionEstimator_Gps(uint32_t nowUs, uint8_t standing, uint8_t flowFresh){
 	if(gps.usedAgo    < POS_EST_GPS_LOSS_CYCLES)     gps.usedAgo++;
 	if(gps.posUsedAgo < POS_EST_GPS_REANCHOR_CYCLES) gps.posUsedAgo++;
@@ -188,7 +188,7 @@ static void PositionEstimator_Gps(uint32_t nowUs, uint8_t standing, uint8_t flow
 	if(g.hAcc > POS_EST_GPS_HACC_MAX || g.sAcc > POS_EST_GPS_SACC_MAX) return;
 	if(est.steps < POS_EST_HISTORY) return;            /* the delay needs a full history */
 
-	/* north/east from the first good fix (flat earth: fine over a few km) */
+	/* first fix*/
 	if(!gps.originSet){
 		gps.lat0      = g.lat;
 		gps.lon0      = g.lon;
@@ -204,7 +204,10 @@ static void PositionEstimator_Gps(uint32_t nowUs, uint8_t standing, uint8_t flow
 	PositionEstimator_Align(&g, then, flowFresh);
 	if(!gps.aligned) return;
 
-	/* north/east -> level frame: turn back by the offset */
+	/* translate the GPS numbers onto the drone’s own map */
+	/* 	[gx,gvx]   [ cos ψ   sin ψ ] [north,velN]
+		[gy,gvy] = [−sin ψ   cos ψ ] [east,velE]
+	*/
 	float c   = cosf(gps.yawOffset);
 	float s   = sinf(gps.yawOffset);
 	float gx  =  c * north  + s * east;
@@ -212,28 +215,24 @@ static void PositionEstimator_Gps(uint32_t nowUs, uint8_t standing, uint8_t flow
 	float gvx =  c * g.velN + s * g.velE;
 	float gvy = -s * g.velN + c * g.velE;
 
-	/* Only a good fix gets here (checked above): a bad one is ignored.
-	 * Position: always, so it also stops the flow's slow drift.
-	 * Velocity: only without the flow, which measures it better. */
 	uint8_t posUse = !standing;
 	uint8_t velUse = !standing && !flowFresh;
 	if(posUse && gps.posUsedAgo >= POS_EST_GPS_REANCHOR_CYCLES){
-		/* first use, or back after a break: put the fix, as it was then, on
-		 * the estimate as it was then. No jump: from here on the GPS only
-		 * stops the drift. */
+		/* Take difference between drone position and gps position to get the percise gps position*/
 		gps.originX = then->x - gx;
 		gps.originY = then->y - gy;
 	}
+	/* precise gps position */
 	gps.x = gx + gps.originX;
 	gps.y = gy + gps.originY;
 
 	if(!posUse) return;
 
-	/* measured then, applied now: shifted by how far the estimate moved since */
 	if(velUse){
 		float vx = PosKF_Get(&kfX, POS_KF_V);
 		float vy = PosKF_Get(&kfY, POS_KF_V);
 		float velStd = (g.sAcc > POS_EST_GPS_VEL_STD_MIN) ? g.sAcc : POS_EST_GPS_VEL_STD_MIN;
+		/* calculate the current gps velocity */
 		float velX   = gvx + (vx - then->vx);
 		float velY   = gvy + (vy - then->vy);
 		uint8_t velUsedX = PosKF_UpdateVelocity(&kfX, velX, velStd, POS_EST_GPS_VEL_GATE);
@@ -253,11 +252,11 @@ static void PositionEstimator_Gps(uint32_t nowUs, uint8_t standing, uint8_t flow
 	float px = PosKF_Get(&kfX, POS_KF_P);
 	float py = PosKF_Get(&kfY, POS_KF_P);
 	float posStd = (g.hAcc > POS_EST_GPS_POS_STD_MIN) ? g.hAcc : POS_EST_GPS_POS_STD_MIN;
+	/* calculate the current gps position */
 	float zx = gps.x + (px - then->x);
 	float zy = gps.y + (py - then->y);
 	if(flowFresh){
-		/* The flow holds the spot better than the GPS, which wanders about
-		 * its hAcc. Only the gap beyond that is drift: pull just that back. */
+		/* drift compensation */
 		float ix   = gps.x - then->x;
 		float iy   = gps.y - then->y;
 		float gap  = sqrtf(ix * ix + iy * iy);
@@ -308,10 +307,10 @@ static void PositionEstimator_Step(const Attitude_Data_t *att){
 		return;
 	}
 
+	/* Use for tilt flow correction */
 	est.rollTurn  += att->rollRate  * sampleDt;
 	est.pitchTurn += att->pitchRate * sampleDt;
 
-	/* a new flow sample: make it a velocity now, while the turns above cover the same time */
 	Flow_Data_t flow;
 	if(FlowTopic_Copy(&flow, 0) == pdPASS && flow.timestamp_us != 0 && flow.timestamp_us != est.lastFlowUs){
 		est.lastFlowUs  = flow.timestamp_us;
@@ -325,7 +324,8 @@ static void PositionEstimator_Step(const Attitude_Data_t *att){
 	est.accelXAcc += att->accelX * sampleDt;
 	est.accelYAcc += att->accelY * sampleDt;
 	if(est.dtAcc < POS_EST_PERIOD_S) return;
-
+	
+	/* Average the 1 kHz acceleration over 10 ms */
 	float dt = est.dtAcc;
 	float ax = est.accelXAcc / est.dtAcc;
 	float ay = est.accelYAcc / est.dtAcc;
@@ -339,12 +339,13 @@ static void PositionEstimator_Step(const Attitude_Data_t *att){
 	if(est.usedAgo < POS_EST_LOSS_CYCLES) est.usedAgo++;
 
 	/* Not flying and standing on the floor (or too low for the flow to see):
-	 * it does not move, and telling the filter so lets it learn the accel bias. */
+	 * it does not move */
 	uint8_t airborne = Arm_IsAirborne();
 	(void)AltitudeTopic_Copy(&est.alt, 0);
 	uint8_t onFloor  = Arm_MotorsAllowed() && est.alt.onFloor;
 	uint8_t standing = !airborne && (onFloor || !est.alt.aglValid || est.alt.agl < POS_EST_HEIGHT_MIN_M);
 	if(standing){
+		/* learn the accel bias */
 		PosKF_UpdateVelocity(&kfX, 0.0f, POS_EST_GROUND_V_STD, 0.0f);
 		PosKF_UpdateVelocity(&kfY, 0.0f, POS_EST_GROUND_V_STD, 0.0f);
 		est.flowPending = 0;
@@ -382,6 +383,8 @@ static void PositionEstimator_Step(const Attitude_Data_t *att){
 	pos->y            = PosKF_Get(&kfY, POS_KF_P);
 	pos->vx           = vx;
 	pos->vy           = vy;
+	/* the transpose of R(ψ) = rotate by −ψ 
+	 * turns back from the map to the nose */
 	pos->vFwd         =  c * vx + s * vy;
 	pos->vRight       = -s * vx + c * vy;
 	pos->yaw          = att->yaw;
@@ -407,16 +410,13 @@ static void PositionEstimator_Step(const Attitude_Data_t *att){
 void PositionEstimatorTask(void *argument){
 	PositionEstimator_SetTaskHandle(xTaskGetCurrentTaskHandle());
 	AttitudeTopic_Subscribe(positionEstimator.positionTask, POSITION_ESTIMATOR_ID_TASK);
-
 	PositionEstimator_Init();
 
 	Attitude_Data_t attitude;
 
 	while(1){
 		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
 		if(AttitudeTopic_Copy(&attitude) != pdPASS) continue;
-
 		PositionEstimator_Step(&attitude);
 	}
 }

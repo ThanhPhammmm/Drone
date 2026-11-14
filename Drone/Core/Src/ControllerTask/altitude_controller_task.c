@@ -17,9 +17,11 @@
 #define VZ_OUTPUT_LIMIT         0.60f
 #define VZ_D_CUTOFF_HZ          10.0f
 
-#define DESCENT_VZ_PER_M        0.3f    /* 1/s: allowed descent speed per metre of height */
+#define DESCENT_VZ_PER_M        0.5f    /* 1/s: allowed descent speed per metre of height */
 #define DESCENT_VZ_MAX          1.0f    /* m/s, high up */
-#define DESCENT_VZ_MIN          0.1f    /* m/s, the touchdown speed */
+#define DESCENT_VZ_MIN          0.25f   /* m/s, the touchdown speed and the slowest descent: 0.1 was
+                                         * smaller than the climb-speed error near the floor, so the
+                                         * drone hung 20 cm up with the stick fully down */
 
 #define LAND_CUT_RATE           1.0f    /* standing on it: the thrust goes down by this part per s */
 
@@ -42,6 +44,7 @@
 #define TAKEOFF_CLIMB_DONE_M    0.10f
 
 #define MANUAL_HANDOVER_RATE    0.5f
+#define FALLBACK_STICK_MOVE     0.05f   /* hold lost by itself: the thrust stays until the throttle moves this much */
 
 #define ALT_CTRL_COPY_TIMEOUT   pdMS_TO_TICKS(2)
 
@@ -112,6 +115,8 @@ void AltitudeControllerTask(void *argument){
     uint8_t    spoolUp      = 0;    /* take-off: thrust rise still rate-limited */
     uint8_t    takeoffClimb = 0;    /* ALT_HOLD take-off: still climbing to TAKEOFF_CLIMB_M */
     uint8_t    wasTakingOff = 0;    /* arm state was FLIGHT_TAKEOFF on the previous run */
+    uint8_t    keepThrust   = 0;    /* hold lost by itself: keep the hold thrust until the pilot moves the throttle */
+    float      keepStick    = 0.0f; /* the throttle stick when it was lost */
     float      hoverRef     = 0.0f; /* published hover thrust (landing detector), 0 = not known */
     float      landCut      = 1.0f; /* landing and standing on the floor: thrust taken down to this part */
 
@@ -152,14 +157,44 @@ void AltitudeControllerTask(void *argument){
             spoolUp       = 1;
             takeoffClimb  = 0;
             hoverRef      = 0.0f;
+            keepThrust    = 0;
         }
         else if(!altHold){
-            if(phase == ALT_PHASE_HOLD) handover = 1; /* Hold -> Angle */
+            if(phase == ALT_PHASE_HOLD){
+                /* Hold -> Angle */
+                handover = 1;
+
+                /* The hover thrust the hold really used (its I-term has followed the
+                 * battery): the next hold starts from it, not from an old estimate. */
+                float used = altitudeController.hoverThrust * (1.0f + vzPID.ki * vzPID.integral);
+                if(used < THRUST_MIN) used = THRUST_MIN;
+                if(used > THRUST_MAX) used = THRUST_MAX;
+                hoverEst      = used;
+                hoverEstValid = 1;
+
+                /* Not the pilot's choice (the altitude estimate dropped out): the stick
+                 * is wherever it was for the hold, often centre = far from hover. */
+                keepThrust = setpoint.holdLost;
+                keepStick  = setpoint.manualThrust;
+            }
             phase        = ALT_PHASE_MANUAL;
             thrust       = setpoint.manualThrust;
             takeoffClimb = 0;
 
-            if(handover){
+            if(keepThrust){
+                float moved = setpoint.manualThrust - keepStick;
+                if(!setpoint.holdLost || moved > FALLBACK_STICK_MOVE || moved < -FALLBACK_STICK_MOVE){
+                    keepThrust = 0;                 /* the pilot takes over: slide to the stick from here */
+                }
+                else{
+                    thrust = lastThrust;
+                }
+            }
+
+            if(keepThrust){
+                /* nothing: the thrust stays */
+            }
+            else if(handover){
                 float step = MANUAL_HANDOVER_RATE * dt;
                 if(thrust > lastThrust + step)      thrust = lastThrust + step;
                 else if(thrust < lastThrust - step) thrust = lastThrust - step;
@@ -174,6 +209,7 @@ void AltitudeControllerTask(void *argument){
         }
         else{
             if(phase != ALT_PHASE_HOLD){
+                keepThrust = 0;
                 AltitudeController_EngageHold(&altitude, lastThrust, tiltComp);
                 phase        = ALT_PHASE_HOLD;
                 spoolUp      = 0;
@@ -182,15 +218,19 @@ void AltitudeControllerTask(void *argument){
                 if(takeoffClimb) altitudeController.holdTarget += TAKEOFF_CLIMB_M;
             }
 
-            /* 
-                * Descent speed: the lower, the slower. 
-                * The stick below centre (or the failsafe) only says "come down": how far the
-                * stick goes does not matter, the speed comes from the height alone. 
+            /*
+                * Descent speed: the lower, the slower.
+                * The stick below centre sets the speed: just below the dead band = DESCENT_VZ_MIN,
+                * fully down = the most the height allows. The failsafe always comes down at that most.
             */
             float descentMax = AltitudeController_DescentLimit(&altitude);
 
             float climbRate = setpoint.climbRate;
-            if(climbRate < 0.0f) climbRate = -descentMax;
+            if(climbRate < 0.0f){
+                float part = (armState == FAILSAFE) ? 1.0f : (-climbRate / ALT_VZ_LIMIT);
+                if(part > 1.0f) part = 1.0f;
+                climbRate = -(DESCENT_VZ_MIN + part * (descentMax - DESCENT_VZ_MIN));
+            }
             if(takeoffClimb){
                 if(climbRate < 0.0f){
                     altitudeController.holdTarget = altitude.altitude;  /* the pilot takes over from here */

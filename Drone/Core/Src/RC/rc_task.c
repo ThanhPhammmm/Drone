@@ -12,6 +12,9 @@
 #define RC_MAX_TILT_RAD             0.52f   /* ~30 deg at full stick, check attitude_controller_task.c accordingly */
 #define RC_HOLD_RELEASE_LOW         0.10f   /* ALT_HOLD waiting for a centred stick: this low = descend */
 #define RC_MAX_YAW_RATE             3.0f    /* rad/s */
+#define RC_MODE_REENTRY_MS          1000U   /* an estimate that dropped out must be valid this long before
+                                             * its hold mode is entered again (no flicking between modes) */
+#define RC_RADIO_CHECK_MS           1000U   /* no frame this long: check the radio this often, set it up again if needed */
 
 static RC_Data_t rc;
 
@@ -23,6 +26,21 @@ static float RC_Norm(int16_t v){
     if(f >  1.0f) f =  1.0f;
     if(f < -1.0f) f = -1.0f;
     return f;
+}
+
+static RC_ValidTimer_t altTimer;
+static RC_ValidTimer_t posTimer;
+
+static uint8_t RC_Usable(RC_ValidTimer_t *t, uint8_t valid, uint8_t inUse, TickType_t now){
+    if(!valid){
+        t->wasValid = 0;
+        return 0;
+    }
+    if(!t->wasValid){
+        t->wasValid   = 1;
+        t->validSince = now;
+    }
+    return inUse || (TickType_t)(now - t->validSince) >= pdMS_TO_TICKS(RC_MODE_REENTRY_MS);
 }
 
 static float RC_HoldThrottle(uint8_t holdMode, uint8_t linkOk, uint8_t *holdEngaged){
@@ -41,6 +59,7 @@ void RCTask(void *argument){
     NRF24_SetTaskHandle(xTaskGetCurrentTaskHandle());
 
     uint8_t radioOk = (NRF24_Init() == NRF24_OK);
+    TickType_t lastRadioCheck  = xTaskGetTickCount();
 
     RC_Packet_t pkt;
     RC_Packet_t latest    = {0};
@@ -59,6 +78,17 @@ void RCTask(void *argument){
 
     while(1){
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(RC_TICK_MS));
+
+        /* Recovers its radio by itself, both at power-up and after a supply dip in flight */
+        TickType_t tickNow = xTaskGetTickCount();
+        if((TickType_t)(tickNow - lastFrame) >= pdMS_TO_TICKS(RC_RADIO_CHECK_MS) &&
+           (TickType_t)(tickNow - lastRadioCheck) >= pdMS_TO_TICKS(RC_RADIO_CHECK_MS)){
+            lastRadioCheck = tickNow;
+            if(!radioOk || NRF24_Check() != NRF24_OK){
+                radioOk = (NRF24_Init() == NRF24_OK);
+            }
+        }
+
         uint8_t gotPacket = 0;
         if(radioOk){
             for(uint8_t n = 0; n < 4; n++){         /* FIFO is 3 deep; bounded even if SPI fails */
@@ -93,23 +123,27 @@ void RCTask(void *argument){
         }
 
         (void)AltitudeTopic_Copy(&altNow, 0);
-        uint8_t altValid = altNow.valid;
         (void)PositionTopic_Copy(&posNow);
-        uint8_t posValid = posNow.valid;
+        FlightMode_t activeNow = FlightMode_GetActive();
+        TickType_t now = xTaskGetTickCount();
+        uint8_t altValid = RC_Usable(&altTimer, altNow.valid,
+                                     activeNow == FLIGHT_MODE_ALT_HOLD || 
+                                     activeNow == FLIGHT_MODE_POS_HOLD, now);
+        uint8_t posValid = RC_Usable(&posTimer, posNow.valid, activeNow == FLIGHT_MODE_POS_HOLD, now);
 
         /* Flight mode actually flown. On link loss: descend, holding the spot
          * (POS_HOLD) if the flow or the GPS gives a position, else ALT_HOLD if
          * the altitude estimate is good, otherwise ANGLE with a blind thrust cut. */
-        FlightMode_t mode;
-        if(linkOk) mode = FlightMode_Resolve(latest.mode, altValid, posValid);
-        else       mode = FlightMode_Resolve(RC_MODE_POS_HOLD, altValid, posValid);
-        rc.mode = (uint8_t)mode;
-        FlightMode_SetActive(mode);
+        FlightMode_t flightMode;
+        if(linkOk) flightMode = FlightMode_Resolve(latest.mode, altValid, posValid);
+        else       flightMode = FlightMode_Resolve(RC_MODE_POS_HOLD, altValid, posValid);
+        rc.mode = (uint8_t)flightMode;
+        FlightMode_SetActive(flightMode);
 
-        uint8_t      holdMode = (mode == FLIGHT_MODE_ALT_HOLD || mode == FLIGHT_MODE_POS_HOLD);
-        uint8_t      holdEngaged;
-        float        climbStickThrottle = RC_HoldThrottle(holdMode, linkOk, &holdEngaged);
-        FlightMode_t stickMode     = holdEngaged ? mode : FLIGHT_MODE_ANGLE;
+        uint8_t holdMode = (flightMode == FLIGHT_MODE_ALT_HOLD || flightMode == FLIGHT_MODE_POS_HOLD);
+        uint8_t holdEngaged;
+        float climbStickThrottle = RC_HoldThrottle(holdMode, linkOk, &holdEngaged);
+        FlightMode_t stickMode = holdEngaged ? flightMode : FLIGHT_MODE_ANGLE;
 
         (void)ThrustTopic_Copy(&thrustNow, 0);
 
@@ -131,7 +165,7 @@ void RCTask(void *argument){
         armIn.hoverThrust    = thrustNow.hoverThrust;
         armIn.liftVz         = altNow.liftVz;
         armIn.accelUp        = altNow.accelUp;
-        armIn.altitudeValid  = altValid;
+        armIn.altitudeValid  = altNow.valid;
         armIn.onFloor        = altNow.onFloor;
         armIn.cosTilt        = cosTilt;
 
@@ -140,14 +174,15 @@ void RCTask(void *argument){
 
         AttitudeSetpoint_Data_t attSp = {0};
         AltitudeSetpoint_Data_t altSp = {0};
-        altSp.mode = (uint8_t)mode;
+        altSp.mode     = (uint8_t)flightMode;
+        altSp.holdLost = linkOk && latest.mode != RC_MODE_ANGLE && flightMode == FLIGHT_MODE_ANGLE;
 
         if(linkOk){
             attSp.roll    = rc.roll  * RC_MAX_TILT_RAD;
             attSp.pitch   = rc.pitch * RC_MAX_TILT_RAD;
             attSp.yawRate = rc.yaw   * RC_MAX_YAW_RATE;
 
-            switch(mode){
+            switch(flightMode){
             case FLIGHT_MODE_POS_HOLD:
                 /* roll/pitch: the position controller flies them (the sticks give
                  * it a speed); the stick angles above only stand in when its

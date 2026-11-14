@@ -8,6 +8,7 @@ typedef struct{
     float climbRate;    // m/s, ALT_HOLD only
     float manualThrust; // 0..1, ANGLE collective (and ALT_HOLD fallback)
     uint8_t mode;       // FlightMode_t in force
+    uint8_t holdLost;   // the pilot asks for ALT_HOLD/POS_HOLD but the altitude estimate is not valid
     uint32_t timestamp_us;
 } AltitudeSetpoint_Data_t;
 

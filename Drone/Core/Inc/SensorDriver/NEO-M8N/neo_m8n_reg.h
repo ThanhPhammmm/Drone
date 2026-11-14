@@ -22,7 +22,7 @@
 
 /* NAV messages */
 #define UBX_NAV_PVT                 0x07    /* position, velocity, time */
-#define UBX_NAV_PVT_LEN             92U
+#define UBX_NAV_PVT_LEN             84U
 
 /* CFG messages */
 #define UBX_CFG_PRT                 0x00    /* port: baud, protocols */

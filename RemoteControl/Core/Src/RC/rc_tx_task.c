@@ -51,11 +51,11 @@ void RCTxTask(void *argument){
     while(1){
         JOY_Read(&pkt);
 //        pkt.mode = ModeSwitch_Read();
-        if(HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_14) == GPIO_PIN_RESET){
-        	pkt.mode = RC_MODE_ALT_HOLD;
-        }
-        else if(HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_13) == GPIO_PIN_RESET){
+        if(HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_13) == GPIO_PIN_RESET){
         	pkt.mode = RC_MODE_POS_HOLD;
+        }
+        else if(HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_14) == GPIO_PIN_RESET){
+        	pkt.mode = RC_MODE_ALT_HOLD;
         }
         else{
         	pkt.mode = RC_MODE_ANGLE;

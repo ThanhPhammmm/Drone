@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define UBX_PAYLOAD_MAX         100U        /* longest message kept: NAV-PVT */
+
 typedef enum{
     NEO_M8N_OK = 0,
     NEO_M8N_ERROR
@@ -25,5 +27,28 @@ typedef struct{
     uint32_t sAcc;          /* mm/s, speed accuracy estimate */
     uint16_t pDOP;          /* 0.01 */
 } NEO_M8N_Pvt_t;
+
+typedef enum{
+    UBX_WAIT_SYNC_1 = 0,
+    UBX_WAIT_SYNC_2,
+    UBX_WAIT_CLASS,
+    UBX_WAIT_ID,
+    UBX_WAIT_LEN_1,
+    UBX_WAIT_LEN_2,
+    UBX_WAIT_PAYLOAD,
+    UBX_WAIT_CK_A,
+    UBX_WAIT_CK_B
+} UbxState_t;
+
+typedef struct{
+    UbxState_t state;
+    uint8_t    cls;
+    uint8_t    id;
+    uint16_t   len;
+    uint16_t   count;
+    uint8_t    ckA;
+    uint8_t    ckB;
+    uint8_t    payload[UBX_PAYLOAD_MAX];
+} UBX_Parser_t;
 
 #endif /* INC_SENSORDRIVER_NEO_M8N_NEO_M8N_DATA_TYPES_H_ */
