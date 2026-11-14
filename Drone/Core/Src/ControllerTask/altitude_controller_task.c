@@ -46,6 +46,8 @@
 #define MANUAL_HANDOVER_RATE    0.5f
 #define FALLBACK_STICK_MOVE     0.05f   /* hold lost by itself: the thrust stays until the throttle moves this much */
 
+#define ALT_STALL_THRUST_BAND   0.06f   /* +-6 % of the thrust, ~+-1 m/s^2 */
+
 #define ALT_CTRL_COPY_TIMEOUT   pdMS_TO_TICKS(2)
 
 AltitudeController_Handle_t altitudeController;
@@ -119,6 +121,8 @@ void AltitudeControllerTask(void *argument){
     float      keepStick    = 0.0f; /* the throttle stick when it was lost */
     float      hoverRef     = 0.0f; /* published hover thrust (landing detector), 0 = not known */
     float      landCut      = 1.0f; /* landing and standing on the floor: thrust taken down to this part */
+    uint8_t    stallHold    = 0;    /* range sensor stalled while hovering: thrust kept near stallThrust */
+    float      stallThrust  = 0.0f; /* the thrust that held the height when it stalled */
 
     TickType_t last = xTaskGetTickCount();
     TickType_t lastRun = last;
@@ -265,15 +269,30 @@ void AltitudeControllerTask(void *argument){
             if(landCut < 0.0f) landCut = 0.0f;
             if(landCut > 1.0f) landCut = 1.0f;
 
+            /* the thrust that holds the height now, before this step moves the I-term */
+            float holding = altitudeController.hoverThrust * (1.0f + vzPID.ki * vzPID.integral);
+
             thrust = altitudeController.hoverThrust * landCut *
                      (1.0f + PID_Update(&vzPID, vzSetpoint, altitude.verticalSpeed, dt));
             vzError = vzSetpoint - altitude.verticalSpeed;
+
+            uint8_t stalled = altitude.rangeStalled && armState == AIRBORNE && !takeoffClimb && climbRate == 0.0f;
+            if(stalled){
+                if(!stallHold) stallThrust = holding;
+                PID_HoldIntegrator(&vzPID);     /* what it would learn now is the guess's error */
+                float lo = stallThrust * (1.0f - ALT_STALL_THRUST_BAND);
+                float hi = stallThrust * (1.0f + ALT_STALL_THRUST_BAND);
+                if(thrust < lo) thrust = lo;
+                if(thrust > hi) thrust = hi;
+            }
+            stallHold = stalled;
 
             /* Increase thrust to compensate for the drone tilting */
             thrust /= tiltComp;
         }
 
         if(phase != ALT_PHASE_HOLD){
+            stallHold = 0;
             PID_Reset(&vzPID);
             altitudeController.holdTarget = altitude.altitude;
             altitudeController.vzSetpoint = 0.0f;

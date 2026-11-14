@@ -5,7 +5,8 @@
 
 #define MAHONY_KP_GROUND	1.0f
 #define MAHONY_KP_FLIGHT	0.2f
-#define MAHONY_KI			0.05f
+#define MAHONY_KI_GROUND	0.05f
+#define MAHONY_KI_FLIGHT	0.0f
 
 static Mahony_t mahony;
 AttitudeEstimator_Handle_t attitudeEstimator;
@@ -19,7 +20,7 @@ void AttitudeEstimatorTask(void *argument){
 	IMUTopic_Subscribe(attitudeEstimator.attitudeTask, ATTITUDE_ESTIMATOR_ID_TASK);
 
     BMI088_Data_t imu;
-    Mahony_Init(&mahony, MAHONY_KP_GROUND, MAHONY_KI);
+    Mahony_Init(&mahony, MAHONY_KP_GROUND, MAHONY_KI_GROUND);
 	uint8_t magWasUsed = 0;
 	
     while(1){
@@ -46,6 +47,7 @@ void AttitudeEstimatorTask(void *argument){
 		float magVec[3] = { mag.x, mag.y, mag.z };
 
 		mahony.kp = Arm_MotorsAllowed() ? MAHONY_KP_FLIGHT : MAHONY_KP_GROUND;
+		mahony.ki = Arm_MotorsAllowed() ? MAHONY_KI_FLIGHT : MAHONY_KI_GROUND;
 		Mahony_Update(&mahony, &imu, magVec, magValid);
 
 		Attitude_Data_t *attitude = &attitudeEstimator.data;
