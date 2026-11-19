@@ -20,6 +20,15 @@
 #define JOY_TRIM_HOLD_MS        1000U       /* still this long before the centre starts to follow */
 #define JOY_TRIM_TAU_MS         2000.0f     /* time constant of the centre following a resting stick */
 
+/* Stick direction: +1 keeps the ADC direction, -1 reverses it.
+ * Right stick up    -> pitch < 0 -> nose down -> drone goes forward.
+ * Left stick down   -> throttle goes down.
+ * If an axis still moves the wrong way, flip only its sign here. */
+#define JOY_DIR_ROLL            (-1)
+#define JOY_DIR_PITCH           (+1)
+#define JOY_DIR_YAW             (-1)
+#define JOY_DIR_THROTTLE        (-1)
+
 typedef struct{
     uint8_t  ch;
     uint8_t  fixedCenter;   /* 1: keep the power-up centre, no slow trimming */
@@ -124,7 +133,7 @@ static uint16_t JOY_ThrottleRead(uint32_t dtMs){
     throttleRaw = (uint16_t)JOY_Average(JOY_CH_THROTTLE);
 
     /* -1000..+1000 around the centre -> 0..1000, released = exactly 500 */
-    int32_t a = JOY_AxisRead(&axisThrottle, dtMs);
+    int32_t a = JOY_DIR_THROTTLE * JOY_AxisRead(&axisThrottle, dtMs);
     int32_t v = (a + RC_CHANNEL_MAX) * RC_THROTTLE_MAX / (2 * RC_CHANNEL_MAX);
     if(v < 0)               v = 0;
     if(v > RC_THROTTLE_MAX) v = RC_THROTTLE_MAX;
@@ -178,9 +187,9 @@ void JOY_Read(RC_Packet_t *pkt){
     if(dtMs > 100U) dtMs = 100U;
     lastReadTick = now;
 
-    pkt->roll     = -JOY_AxisRead(&axisRoll,  dtMs);
-    pkt->pitch    = -JOY_AxisRead(&axisPitch, dtMs);
-    pkt->yaw      = -JOY_AxisRead(&axisYaw,   dtMs);
+    pkt->roll     = JOY_DIR_ROLL  * JOY_AxisRead(&axisRoll,  dtMs);
+    pkt->pitch    = JOY_DIR_PITCH * JOY_AxisRead(&axisPitch, dtMs);
+    pkt->yaw      = JOY_DIR_YAW   * JOY_AxisRead(&axisYaw,   dtMs);
     pkt->throttle = JOY_ThrottleRead(dtMs);
 
     /* Switch closed to GND (pin reads LOW) = armed. */
