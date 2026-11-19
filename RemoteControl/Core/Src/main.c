@@ -35,6 +35,7 @@
 #include "rc_tx_task.h"
 #include "joystick.h"
 #include "telemetry.h"
+#include "display_task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -119,12 +120,15 @@ int main(void)
   MX_ADC1_Init();
   MX_SPI1_Init();
   MX_USART1_UART_Init();
+  MX_SPI3_Init();
   /* USER CODE BEGIN 2 */
   BaseType_t ret;
 
   ret = xTaskCreate(RCTxTask, "RCTX", STACK_RCTX, NULL, TASK_PRIO_RCTX, NULL);
   configASSERT(ret == pdPASS);
   ret = xTaskCreate(TelemetryPrintTask, "TLM", STACK_TLM, NULL, TASK_PRIO_TLM, NULL);
+  configASSERT(ret == pdPASS);
+  ret = xTaskCreate(DisplayTask, "DISP", STACK_DISP, NULL, TASK_PRIO_DISP, NULL);
   configASSERT(ret == pdPASS);
   vTaskStartScheduler();
   /* USER CODE END 2 */

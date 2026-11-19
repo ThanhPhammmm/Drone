@@ -7,9 +7,9 @@
 #define POS_CTRL_STICK_DEADBAND     0.2f   /* the remote has its own; this only stops stick noise */
 
 /* Flow (indoors, low): a clean, quick velocity */
-#define POS_CTRL_FLOW_POS_KP		0.8f    /* 1/s: position error -> speed */
+#define POS_CTRL_FLOW_POS_KP		0.6f    /* 1/s: position error -> speed */
 #define POS_CTRL_FLOW_VEL_KP		1.6f    /* m/s^2 per m/s; 2.0 swings when the flow scale is 40 % off (sim) */
-#define POS_CTRL_FLOW_VEL_KI		0.4f    /* 1/s: holds against a steady push (draught, weight off centre) */
+#define POS_CTRL_FLOW_VEL_KI		0.3f    /* 1/s: holds against a steady push (draught, weight off centre) */
 #define POS_CTRL_FLOW_I_MAX			1.0f    /* m/s^2 the I-term may hold (~6 deg of tilt) */
 
 /* GPS (outdoors, high): the position wanders ~1 m and comes 0.15 s late, so
