@@ -19,18 +19,18 @@ void AttitudeEstimatorTask(void *argument){
 	AttitudeEstimator_SetTaskHandle(xTaskGetCurrentTaskHandle());
 	IMUTopic_Subscribe(attitudeEstimator.attitudeTask, ATTITUDE_ESTIMATOR_ID_TASK);
 
-    BMI088_Data_t imu;
-    Mahony_Init(&mahony, MAHONY_KP_GROUND, MAHONY_KI_GROUND);
+	BMI088_Data_t imu;
+	Mahony_Init(&mahony, MAHONY_KP_GROUND, MAHONY_KI_GROUND);
 	uint8_t magWasUsed = 0;
 	
-    while(1){
+	while(1){
 		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
 		if(IMUTopic_Copy(&imu) != pdPASS) continue;
 
-        float ax = imu.accel.x;
-        float ay = imu.accel.y;
-        float az = imu.accel.z;
+		float ax = imu.accel.x;
+		float ay = imu.accel.y;
+		float az = imu.accel.z;
 
 		uint8_t useMag = ATT_EST_USE_MAG;
 		if(useMag && !magWasUsed) Mahony_ResetHeading(&mahony);
@@ -40,9 +40,9 @@ void AttitudeEstimatorTask(void *argument){
 		uint8_t magValid = 0;
 		if(useMag && MagTopic_Copy(&mag, 0) == pdPASS && mag.timestamp_us != 0){
 			int32_t age_us = Time_DiffUs(imu.timestamp_us, mag.timestamp_us);
-		    if(age_us < MAG_MAX_AGE_US && age_us > -MAG_MAX_AGE_US){
-		        magValid = 1;
-		    }
+			if(age_us < MAG_MAX_AGE_US && age_us > -MAG_MAX_AGE_US){
+				magValid = 1;
+			}
 		}
 		float magVec[3] = { mag.x, mag.y, mag.z };
 
@@ -60,20 +60,20 @@ void AttitudeEstimatorTask(void *argument){
 
 		Mahony_GetEuler(&mahony, &attitude->roll, &attitude->pitch, &attitude->yaw);
 
-	    float rate[3];
-	    Mahony_GetRate(&mahony, rate);
+		float rate[3];
+		Mahony_GetRate(&mahony, rate);
 
-		attitude->rollRate  = rate[0];
-		attitude->pitchRate = rate[1];
-		attitude->yawRate   = rate[2];
+		attitude->rollRate	= rate[0];
+		attitude->pitchRate	= rate[1];
+		attitude->yawRate	= rate[2];
 
 		attitude->gyroBiasX = mahony.bias[0];
 		attitude->gyroBiasY = mahony.bias[1];
 		attitude->gyroBiasZ = mahony.bias[2];
 
-        float q0 = attitude->q0; 
+		float q0 = attitude->q0; 
 		float q1 = attitude->q1;
-        float q2 = attitude->q2;
+		float q2 = attitude->q2;
 		float q3 = attitude->q3;
 
 		// altitude accelerometer calculation
@@ -117,25 +117,25 @@ void AttitudeEstimatorTask(void *argument){
 		*/
 
 		/* the third DCM rows: vertical acceleration */
-        float rx = 2.0f * (q1*q3 - q0*q2);
-        float ry = 2.0f * (q0*q1 + q2*q3);
-        float rz = q0*q0 - q1*q1 - q2*q2 + q3*q3;
+		float rx = 2.0f * (q1*q3 - q0*q2);
+		float ry = 2.0f * (q0*q1 + q2*q3);
+		float rz = q0*q0 - q1*q1 - q2*q2 + q3*q3;
 
-        float fDown = rx*ax + ry*ay + rz*az;
+		float fDown = rx*ax + ry*ay + rz*az;
 
-        attitude->accelUp = -(fDown + BMI088_G);
+		attitude->accelUp = -(fDown + BMI088_G);
 
-        /* the first two DCM rows: horizontal acceleration */
-        attitude->accelX = (q0*q0 + q1*q1 - q2*q2 - q3*q3) * ax
-                         + 2.0f * (q1*q2 - q0*q3) * ay
-                         + 2.0f * (q1*q3 + q0*q2) * az;
-        attitude->accelY = 2.0f * (q1*q2 + q0*q3) * ax
-                         + (q0*q0 - q1*q1 + q2*q2 - q3*q3) * ay
-                         + 2.0f * (q2*q3 - q0*q1) * az;
+		/* the first two DCM rows: horizontal acceleration */
+		attitude->accelX = (q0*q0 + q1*q1 - q2*q2 - q3*q3) * ax
+						 + 2.0f * (q1*q2 - q0*q3) * ay
+						 + 2.0f * (q1*q3 + q0*q2) * az;
+		attitude->accelY = 2.0f * (q1*q2 + q0*q3) * ax
+						 + (q0*q0 - q1*q1 + q2*q2 - q3*q3) * ay
+						 + 2.0f * (q2*q3 - q0*q1) * az;
 
-        attitude->dt = imu.dt;
+		attitude->dt = imu.dt;
 		attitude->timestamp_us = imu.timestamp_us;
 
 		AttitudeTopic_Publish(attitude);
-    }
+	}
 }

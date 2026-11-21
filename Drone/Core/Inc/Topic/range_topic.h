@@ -5,10 +5,10 @@
 #include <stdint.h>
 
 typedef struct{
-    float    distance_m;    /* m, along the sensor axis, not tilt corrected */
-    uint8_t  rangeStatus;   /* VL53L1X_RangeStatus_t, 0 = valid */
-    uint8_t  valid;
-    uint32_t timestamp_us;
+	float distance_m;		/* m, along the sensor axis, not tilt corrected */
+	uint8_t rangeStatus;	/* VL53L1X_RangeStatus_t, 0 = valid */
+	uint8_t valid;
+	uint32_t timestamp_us;
 } Range_Data_t;
 
 extern MutexTopic_t rangeTopic;

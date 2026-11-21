@@ -1,40 +1,40 @@
 #include "arm.h"
 
-#define ARM_CONFIRM_MS				500U    /* hold the switch this long to arm */
+#define ARM_CONFIRM_MS				500U	/* hold the switch this long to arm */
 
-#define LIFTOFF_VZ					0.25f   /* m/s up = off the ground */
+#define LIFTOFF_VZ					0.25f	/* m/s up = off the ground */
 #define LIFTOFF_CONFIRM_MS			100U
-#define LIFTOFF_GROUND_VZ			0.10f   /* aborted take-off below this: it never left the ground */
+#define LIFTOFF_GROUND_VZ			0.10f	/* aborted take-off below this: it never left the ground */
 
-#define LANDING_HOVER_FRACTION		0.6f    /* thrust at most this part of the hover thrust... */
-#define LANDING_THRUST_MAX			0.12f   /* ...or this, if lower or no hover thrust is known yet */
-#define LANDING_ACCEL_MAX			1.0f    /* m/s^2: "does not drop" */
-#define LANDING_ACCEL_LPF			0.3f    /* per update (50 Hz), ~50 ms */
+#define LANDING_HOVER_FRACTION		0.6f	/* thrust at most this part of the hover thrust... */
+#define LANDING_THRUST_MAX			0.12f	/* ...or this, if lower or no hover thrust is known yet */
+#define LANDING_ACCEL_MAX			1.0f	/* m/s^2: "does not drop" */
+#define LANDING_ACCEL_LPF			0.3f	/* per update (50 Hz), ~50 ms */
 #define LANDING_CONFIRM_MS			300U
 
-#define FAILSAFE_BLIND_DISARM_MS	5000U   /* link lost, no altitude estimate -> cut motors */
-#define FAILSAFE_MAX_DISARM_MS		30000U  /* link lost, descending on the altitude estimate -> backstop */
+#define FAILSAFE_BLIND_DISARM_MS	5000U	/* link lost, no altitude estimate -> cut motors */
+#define FAILSAFE_MAX_DISARM_MS		30000U	/* link lost, descending on the altitude estimate -> backstop */
 
-#define ARM_MAX_TILT_COS			0.906f  /* cos 25 deg */
+#define ARM_MAX_TILT_COS			0.906f	/* cos 25 deg */
 
-#define TUMBLE_TILT_COS				0.5f    /* cos 60 deg */
+#define TUMBLE_TILT_COS				0.5f	/* cos 60 deg */
 #define TUMBLE_CONFIRM_MS			200U
 
 typedef struct{
-	uint8_t  running;
+	uint8_t running;
 	uint32_t since;
 } Arm_Timer_t;
 
 volatile arm_state_t arm_state = DISARMED;
 
-static uint8_t     prevArmSwitch		= 1;
-static uint32_t    armingTick			= 0;
-static float       accelUpFiltered		= 0.0f;
+static uint8_t prevArmSwitch = 1;
+static uint32_t armingTick = 0;
+static float accelUpFiltered = 0.0f;
 static Arm_Timer_t liftoffTimer;
 static Arm_Timer_t landedTimer;
 static Arm_Timer_t tumbleTimer;
-static uint8_t     tumbled				= 0;
-static uint8_t     takeoffLocked		= 0;	/* just landed: stick to the bottom before the next take-off */
+static uint8_t tumbled = 0;
+static uint8_t takeoffLocked = 0;	/* just landed: stick to the bottom before the next take-off */
 
 static uint8_t Arm_Hold(Arm_Timer_t *t, uint8_t condition, uint32_t now, uint32_t holdMs){
 	if(!condition){
@@ -43,15 +43,15 @@ static uint8_t Arm_Hold(Arm_Timer_t *t, uint8_t condition, uint32_t now, uint32_
 	}
 	if(!t->running){
 		t->running = 1;
-		t->since   = now;
+		t->since = now;
 	}
 	return (now - t->since) >= holdMs;
 }
 
 static void Arm_Enter(arm_state_t s){
-	arm_state            = s;
+	arm_state = s;
 	liftoffTimer.running = 0;
-	landedTimer.running  = 0;
+	landedTimer.running = 0;
 }
 
 static uint8_t Arm_LiftoffConfirmed(const Arm_Input_t *in, uint32_t now){
@@ -62,7 +62,7 @@ static uint8_t Arm_Landed(const Arm_Input_t *in, uint32_t now){
 	float limit = LANDING_HOVER_FRACTION * in->hoverThrust;
 	if(limit < LANDING_THRUST_MAX) limit = LANDING_THRUST_MAX;
 
-	uint8_t thrustLow   = in->thrust <= limit;
+	uint8_t thrustLow = in->thrust <= limit;
 	/* the range sensor seeing the floor says it as well, and does not mind vibration */
 	uint8_t notDropping = fabsf(accelUpFiltered) <= LANDING_ACCEL_MAX || in->onFloor;
 	return Arm_Hold(&landedTimer, thrustLow && notDropping, now, LANDING_CONFIRM_MS);
@@ -104,8 +104,8 @@ void Arm_Update(const Arm_Input_t *in){
 	uint32_t now = xTaskGetTickCount();
 
 	uint8_t armEdge = in->armSwitch && !prevArmSwitch;
-	prevArmSwitch   = in->armSwitch;
-	uint8_t level   = in->cosTilt >= ARM_MAX_TILT_COS;
+	prevArmSwitch = in->armSwitch;
+	uint8_t level = in->cosTilt >= ARM_MAX_TILT_COS;
 
 	accelUpFiltered += (in->accelUp - accelUpFiltered) * LANDING_ACCEL_LPF;
 
@@ -190,9 +190,9 @@ void Arm_Update(const Arm_Input_t *in){
 
 	case FAILSAFE:
 		if(in->linkOk){
-			if(!in->armSwitch)          Arm_Enter(DISARMED);
+			if(!in->armSwitch) Arm_Enter(DISARMED);
 			else if(in->descendRequest) Arm_Enter(LANDING);
-			else                        Arm_Enter(AIRBORNE);
+			else Arm_Enter(AIRBORNE);
 		}
 		else if(in->altitudeValid){
 			if(Arm_Landed(in, now) || in->linkLostMs > FAILSAFE_MAX_DISARM_MS){

@@ -5,10 +5,10 @@
 #include <stdint.h>
 
 typedef struct{
-    float    pressure_pa; // pascal
-    float    temperature_c; // celsius
-    float    altitude_m; // m
-    uint32_t timestamp_us;
+	float pressure_pa;		// pascal
+	float temperature_c;	// celsius
+	float altitude_m;		// m
+	uint32_t timestamp_us;
 } Baro_Data_t;
 
 extern MutexTopic_t baroTopic;

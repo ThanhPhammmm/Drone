@@ -23,20 +23,20 @@ typedef enum {
 } arm_state_t;
 
 typedef struct{
-	uint8_t  armSwitch;
-	uint8_t  sensorsReady;		/* IMU / mag / baro calibration finished */
-	uint8_t  linkOk;
+	uint8_t armSwitch;
+	uint8_t sensorsReady;	/* IMU / mag / baro calibration finished */
+	uint8_t linkOk;
 	uint32_t linkLostMs;
-	uint8_t  throttleLow;		/* throttle stick at the bottom (required to arm) */
-	uint8_t  takeoffRequest;
-	uint8_t  descendRequest;
-	float    thrust;
-	float    hoverThrust;		/* thrust that hovers, measured in flight; 0 = not known yet */
-	float    liftVz;			/* m/s up, accelerometer only: how fast it leaves the ground during the take-off */
-	float    accelUp;			/* m/s^2 up */
-	uint8_t  altitudeValid;
-	uint8_t  onFloor;			/* range sensor reads what it reads when landed */
-	float    cosTilt;			/* cos of the angle between body z and vertical (1 = level, <0 = upside down) */
+	uint8_t throttleLow;	/* throttle stick at the bottom (required to arm) */
+	uint8_t takeoffRequest;
+	uint8_t descendRequest;
+	float thrust;
+	float hoverThrust;		/* thrust that hovers, measured in flight; 0 = not known yet */
+	float liftVz;			/* m/s up, accelerometer only: how fast it leaves the ground during the take-off */
+	float accelUp;			/* m/s^2 up */
+	uint8_t altitudeValid;
+	uint8_t onFloor;		/* range sensor reads what it reads when landed */
+	float cosTilt;			/* cos of the angle between body z and vertical (1 = level, <0 = upside down) */
 } Arm_Input_t;
 
 extern volatile arm_state_t arm_state;
@@ -49,6 +49,6 @@ arm_state_t Arm_GetState(void);
 uint8_t Arm_MotorsAllowed(void);
 uint8_t Arm_GroundIdle(void);
 uint8_t Arm_IsAirborne(void);
-uint8_t Arm_Tumbled(void);			/* 1: the last disarm was the tumble cut-off */
+uint8_t Arm_Tumbled(void);	/* 1: the last disarm was the tumble cut-off */
 
 #endif /* INC_STATE_ARM_H_ */

@@ -5,9 +5,9 @@
  * 						RATE PID TUNING
  * ==========================================================
  * Tuning on the real drone, a few cm off the ground, one step at a time:
- *   - fast buzz / shaking / hot motors			-> P or D too high: back off 20%
- *   - slow wobble after a stick input			-> P too low: +20% at a time
- *   - leans and creeps back slowly in hover	-> I (or the level calibration)
+ * - fast buzz / shaking / hot motors			-> P or D too high: back off 20%
+ * - slow wobble after a stick input			-> P too low: +20% at a time
+ * - leans and creeps back slowly in hover	-> I (or the level calibration)
  * Stop raising P at the first sign of buzz and go back two steps.
  * ========================================================== */
 
@@ -20,8 +20,8 @@
 #define RATE_PID_KD_PITCH		0.00020f
 
 #define RATE_PID_KP_YAW			0.30f
-#define RATE_PID_KI_YAW   		0.40f
-#define RATE_PID_KD_YAW   		0.0f
+#define RATE_PID_KI_YAW			0.40f
+#define RATE_PID_KD_YAW			0.0f
 
 #define RATE_PID_I_MAX_ROLL_PITCH		0.15f
 #define RATE_PID_I_MAX_YAW				0.15f
@@ -41,7 +41,7 @@ static PID_t pitchRatePID;
 static PID_t yawRatePID;
 
 static volatile MotorSaturation_t lastSat;
-static volatile uint32_t          maxStepUs;
+static volatile uint32_t maxStepUs;
 
 void RateController_SetTaskHandle(TaskHandle_t handle){
 	rateController.controllerTask = handle;
@@ -52,14 +52,14 @@ static void RateController_Idle(void){
 	PID_Reset(&pitchRatePID);
 	PID_Reset(&yawRatePID);
 
-	rateController.rollTorqueOutput  = 0.0f;
-	rateController.pitchTorqueOutput = 0.0f;
-	rateController.yawTorqueOutput   = 0.0f;
+	rateController.rollTorqueOutput		= 0.0f;
+	rateController.pitchTorqueOutput	= 0.0f;
+	rateController.yawTorqueOutput		= 0.0f;
 
-	lastSat.rollPitchSaturated    = 0;
-	lastSat.yawSaturated          = 0;
-	lastSat.throttleSaturatedHigh = 0;
-	lastSat.throttleSaturatedLow  = 0;
+	lastSat.rollPitchSaturated			= 0;
+	lastSat.yawSaturated				= 0;
+	lastSat.throttleSaturatedHigh		= 0;
+	lastSat.throttleSaturatedLow		= 0;
 
 	MotorOutput_Update(0.0f, 0.0f, 0.0f, 0.0f, NULL);
 }
@@ -74,23 +74,23 @@ void RateControllerTask(void *argument){
 	RateController_SetTaskHandle(xTaskGetCurrentTaskHandle());
 	AttitudeTopic_Subscribe(rateController.controllerTask, RATE_CONTROLLER_ID_TASK);
 
-	PID_Init(&rollRatePID,  RATE_PID_KP_ROLL,  RATE_PID_KI_ROLL,  RATE_PID_KD_ROLL,
-	         RATE_PID_INTEGRAL_LIMIT(RATE_PID_I_MAX_ROLL_PITCH, RATE_PID_KI_ROLL),
-	         RATE_PID_OUTPUT_LIMIT, RATE_PID_D_CUTOFF_HZ);
+	PID_Init(&rollRatePID, RATE_PID_KP_ROLL, RATE_PID_KI_ROLL, RATE_PID_KD_ROLL,
+			RATE_PID_INTEGRAL_LIMIT(RATE_PID_I_MAX_ROLL_PITCH, RATE_PID_KI_ROLL),
+			RATE_PID_OUTPUT_LIMIT, RATE_PID_D_CUTOFF_HZ);
 	PID_Init(&pitchRatePID, RATE_PID_KP_PITCH, RATE_PID_KI_PITCH, RATE_PID_KD_PITCH,
-	         RATE_PID_INTEGRAL_LIMIT(RATE_PID_I_MAX_ROLL_PITCH, RATE_PID_KI_PITCH),
-	         RATE_PID_OUTPUT_LIMIT, RATE_PID_D_CUTOFF_HZ);
-	PID_Init(&yawRatePID,   RATE_PID_KP_YAW,   RATE_PID_KI_YAW,   RATE_PID_KD_YAW,
-	         RATE_PID_INTEGRAL_LIMIT(RATE_PID_I_MAX_YAW, RATE_PID_KI_YAW),
-	         RATE_PID_OUTPUT_LIMIT_YAW, RATE_PID_D_CUTOFF_HZ);
+			RATE_PID_INTEGRAL_LIMIT(RATE_PID_I_MAX_ROLL_PITCH, RATE_PID_KI_PITCH),
+			RATE_PID_OUTPUT_LIMIT, RATE_PID_D_CUTOFF_HZ);
+	PID_Init(&yawRatePID, RATE_PID_KP_YAW, RATE_PID_KI_YAW, RATE_PID_KD_YAW,
+			RATE_PID_INTEGRAL_LIMIT(RATE_PID_I_MAX_YAW, RATE_PID_KI_YAW),
+			RATE_PID_OUTPUT_LIMIT_YAW, RATE_PID_D_CUTOFF_HZ);
 
 	Attitude_Data_t attitude = {0};
 	RateSetpoint_Data_t setpoint = {0};
 	uint32_t lastSampleUs = 0;
-	uint8_t  haveSample   = 0;
+	uint8_t haveSample = 0;
 
 	while(1){
-		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);          /* 1 kHz, from estimator */
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);	/* 1 kHz, from estimator */
 		if(AttitudeTopic_Copy(&attitude) != pdPASS) continue;
 
 		if(haveSample && attitude.timestamp_us == lastSampleUs) continue;
@@ -98,24 +98,24 @@ void RateControllerTask(void *argument){
 		float dt = (float)stepUs * 1e-6f;
 		if(stepUs > maxStepUs) maxStepUs = stepUs;
 		lastSampleUs = attitude.timestamp_us;
-		haveSample   = 1;
+		haveSample = 1;
 
-		if(RateSetpointTopic_Copy(&setpoint) != pdPASS) continue;   /* latest (250 Hz) */
+		if(RateSetpointTopic_Copy(&setpoint) != pdPASS) continue; /* latest (250 Hz) */
 
-        if(ThrustTopic_Copy(&thrust, 0) == pdPASS){
-            lastThrust = thrust.thrust;
-        }
+		if(ThrustTopic_Copy(&thrust, 0) == pdPASS){
+			lastThrust = thrust.thrust;
+		}
 
-        if(!Arm_MotorsAllowed()){
-        	RateController_Idle();
-        	continue;
-        }
+		if(!Arm_MotorsAllowed()){
+			RateController_Idle();
+			continue;
+		}
 
-        int32_t age_us = Time_DiffUs(attitude.timestamp_us, setpoint.timestamp_us);
+		int32_t age_us = Time_DiffUs(attitude.timestamp_us, setpoint.timestamp_us);
 		if(age_us > (int32_t)RATE_SETPOINT_MAX_AGE_US || age_us < -(int32_t)RATE_SETPOINT_MAX_AGE_US){
-			setpoint.rollRate  = 0.0f;
-			setpoint.pitchRate = 0.0f;
-			setpoint.yawRate   = 0.0f;
+			setpoint.rollRate	= 0.0f;
+			setpoint.pitchRate	= 0.0f;
+			setpoint.yawRate	= 0.0f;
 		}
 
 #if BALANCE_TEST == 0
@@ -127,26 +127,26 @@ void RateControllerTask(void *argument){
 		}
 #endif
 
-		rateController.rollTorqueOutput  = PID_Update(&rollRatePID,  setpoint.rollRate,  attitude.rollRate,  dt);
-		rateController.pitchTorqueOutput = PID_Update(&pitchRatePID, setpoint.pitchRate, attitude.pitchRate, dt);
-		rateController.yawTorqueOutput   = PID_Update(&yawRatePID,   setpoint.yawRate,   attitude.yawRate,   dt);
+		rateController.rollTorqueOutput		= PID_Update(&rollRatePID, setpoint.rollRate, attitude.rollRate, dt);
+		rateController.pitchTorqueOutput	= PID_Update(&pitchRatePID, setpoint.pitchRate, attitude.pitchRate, dt);
+		rateController.yawTorqueOutput		= PID_Update(&yawRatePID, setpoint.yawRate, attitude.yawRate, dt);
 
 		MotorSaturation_t sat = {0};
-        MotorOutput_Update(rateController.rollTorqueOutput, rateController.pitchTorqueOutput, rateController.yawTorqueOutput, lastThrust, &sat);
+		MotorOutput_Update(rateController.rollTorqueOutput, rateController.pitchTorqueOutput, rateController.yawTorqueOutput, lastThrust, &sat);
 
-        /* Anti-windup: the mixer could not deliver the torque on that axis, so
-         * do not let the integrator keep growing. */
-        if(sat.rollPitchSaturated){
-        	PID_HoldIntegrator(&rollRatePID);
-        	PID_HoldIntegrator(&pitchRatePID);
-        }
-        if(sat.yawSaturated){
-        	PID_HoldIntegrator(&yawRatePID);
-        }
-        lastSat.rollPitchSaturated    = sat.rollPitchSaturated;
-        lastSat.yawSaturated          = sat.yawSaturated;
-        lastSat.throttleSaturatedHigh = sat.throttleSaturatedHigh;
-        lastSat.throttleSaturatedLow  = sat.throttleSaturatedLow;
+		/* Anti-windup: the mixer could not deliver the torque on that axis, so
+		 * do not let the integrator keep growing. */
+		if(sat.rollPitchSaturated){
+			PID_HoldIntegrator(&rollRatePID);
+			PID_HoldIntegrator(&pitchRatePID);
+		}
+		if(sat.yawSaturated){
+			PID_HoldIntegrator(&yawRatePID);
+		}
+		lastSat.rollPitchSaturated		= sat.rollPitchSaturated;
+		lastSat.yawSaturated			= sat.yawSaturated;
+		lastSat.throttleSaturatedHigh	= sat.throttleSaturatedHigh;
+		lastSat.throttleSaturatedLow	= sat.throttleSaturatedLow;
 	}
 }
 
@@ -158,10 +158,10 @@ void RateController_GetTorque(float torque[3]){
 
 MotorSaturation_t RateController_GetSaturation(void){
 	MotorSaturation_t s;
-	s.rollPitchSaturated    = lastSat.rollPitchSaturated;
-	s.yawSaturated          = lastSat.yawSaturated;
-	s.throttleSaturatedHigh = lastSat.throttleSaturatedHigh;
-	s.throttleSaturatedLow  = lastSat.throttleSaturatedLow;
+	s.rollPitchSaturated	= lastSat.rollPitchSaturated;
+	s.yawSaturated 			= lastSat.yawSaturated;
+	s.throttleSaturatedHigh	= lastSat.throttleSaturatedHigh;
+	s.throttleSaturatedLow	= lastSat.throttleSaturatedLow;
 	return s;
 }
 

@@ -16,20 +16,20 @@ void App_Init(void){
 
 	App_I2CNoTxDma();
 
-    IMUTopic_Init();
-    AttitudeTopic_Init();
-    RateSetpointTopic_Init();
-    AttitudeSetpointTopic_Init();
-    MagTopic_Init();
-    BaroTopic_Init();
-    AltitudeTopic_Init();
-    ThrustTopic_Init();
-    RCTopic_Init();
-    AltitudeSetpointTopic_Init();
-    RangeTopic_Init();
-    FlowTopic_Init();
-    GpsTopic_Init();
-    PositionTopic_Init();
-    TiltTopic_Init();
-    Arm_Init();
+	IMUTopic_Init();
+	AttitudeTopic_Init();
+	RateSetpointTopic_Init();
+	AttitudeSetpointTopic_Init();
+	MagTopic_Init();
+	BaroTopic_Init();
+	AltitudeTopic_Init();
+	ThrustTopic_Init();
+	RCTopic_Init();
+	AltitudeSetpointTopic_Init();
+	RangeTopic_Init();
+	FlowTopic_Init();
+	GpsTopic_Init();
+	PositionTopic_Init();
+	TiltTopic_Init();
+	Arm_Init();
 }

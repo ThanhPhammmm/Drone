@@ -1,7 +1,7 @@
 #ifndef INC_SENSORDRIVER_VL53L1X_VL53L1X_REG_H_
 #define INC_SENSORDRIVER_VL53L1X_VL53L1X_REG_H_
 
-#define VL53L1X_I2C_ADDR                                (0x29 << 1)
+#define VL53L1X_I2C_ADDR									(0x29 << 1)
 
 /* 16-bit register index, multi-byte values are big endian */
 #define VL53L1X_REG_VHV_CONFIG_TIMEOUT_MACROP_LOOP_BOUND	0x0008
@@ -33,8 +33,8 @@
 #define VL53L1X_MODE_START_RANGING							0x40
 #define VL53L1X_MODE_STOP_RANGING							0x00
 #define VL53L1X_INTERRUPT_CLEAR								0x01
-#define VL53L1X_GPIO_HV_MUX_ACTIVE_LOW						0x10    /* bit 4: 0 = GPIO1 active high */
+#define VL53L1X_GPIO_HV_MUX_ACTIVE_LOW						0x10	/* bit 4: 0 = GPIO1 active high */
 
-#define VL53L1X_RESULT_LEN									17      /* 0x89 .. 0x99 */
+#define VL53L1X_RESULT_LEN									17	/* 0x89 .. 0x99 */
 
 #endif /* INC_SENSORDRIVER_VL53L1X_VL53L1X_REG_H_ */

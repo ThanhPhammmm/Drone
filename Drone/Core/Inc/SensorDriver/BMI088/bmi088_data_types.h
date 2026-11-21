@@ -5,63 +5,63 @@
 #include <stdbool.h>
 
 typedef struct{
-    int16_t x;
-    int16_t y;
-    int16_t z;
+	int16_t x;
+	int16_t y;
+	int16_t z;
 
 } BMI088_AccelRaw_t;
 
 typedef struct{
-    int16_t x;
-    int16_t y;
-    int16_t z;
+	int16_t x;
+	int16_t y;
+	int16_t z;
 
 } BMI088_GyroRaw_t;
 
 typedef struct{
-    float x;
-    float y;
-    float z;
+	float x;
+	float y;
+	float z;
 
 } BMI088_Accel_t;
 
 typedef struct{
-    float x;
-    float y;
-    float z;
+	float x;
+	float y;
+	float z;
 
 } BMI088_Gyro_t;
 
 typedef struct{
-    BMI088_AccelRaw_t accel_raw;
-    BMI088_GyroRaw_t gyro_raw;
+	BMI088_AccelRaw_t accel_raw;
+	BMI088_GyroRaw_t gyro_raw;
 
-    BMI088_Accel_t accel;
-    BMI088_Gyro_t gyro;
+	BMI088_Accel_t accel;
+	BMI088_Gyro_t gyro;
 
-    uint32_t timestamp;
-    uint32_t timestamp_us;
+	uint32_t timestamp;
+	uint32_t timestamp_us;
 
-    uint8_t gyro_updated;
-    uint8_t accel_updated;
+	uint8_t gyro_updated;
+	uint8_t accel_updated;
 
-    float dt;
+	float dt;
 } BMI088_Data_t;
 
 typedef struct{
-    BMI088_Gyro_t gyro_bias;   // rad/s,
-    BMI088_Accel_t accel_bias; // m/s^2,
+	BMI088_Gyro_t gyro_bias;	// rad/s,
+	BMI088_Accel_t accel_bias;	// m/s^2,
 
-    uint8_t calibrated;        // 1
+	uint8_t calibrated;	// 1
 
 } BMI088_Calib_t;
 
 typedef enum{
-    BMI088_OK = 0,
-    BMI088_ERROR,
-    BMI088_TIMEOUT,
-    BMI088_INVALID_CHIP,
-    BMI088_DMA_BUSY,
+	BMI088_OK = 0,
+	BMI088_ERROR,
+	BMI088_TIMEOUT,
+	BMI088_INVALID_CHIP,
+	BMI088_DMA_BUSY,
 } BMI088_Status_t;
 
 

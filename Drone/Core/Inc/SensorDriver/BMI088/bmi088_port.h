@@ -24,7 +24,7 @@ extern SPI_HandleTypeDef hspi1;
 #define BMI088_READ_BITMASK		0x80
 #define BMI088_WRITE_BITMASK	0x7F
 
-#define BMI088_TIMEOUT_MS     10
+#define BMI088_TIMEOUT_MS       10
 
 void BMI088_Port_Init(void);
 void BMI088_AccCS_Low(void);

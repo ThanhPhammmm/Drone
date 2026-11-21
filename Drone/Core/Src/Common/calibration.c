@@ -5,8 +5,8 @@
 
 typedef struct{
 	volatile Calib_Status_t status;
-	volatile TickType_t     startTick;
-	volatile uint8_t        attempts;
+	volatile TickType_t startTick;
+	volatile uint8_t attempts;
 } Calib_Entry_t;
 
 static Calib_Entry_t calib[CALIB_SENSOR_COUNT];		/* zeroed = CALIB_WAITING */
@@ -57,19 +57,19 @@ uint8_t Calib_IsTurn(Calib_Sensor_t s){
  * while it is supposed to be turned by hand. */
 uint8_t Calib_ReadyToArm(void){
 	return Calib_Usable(CALIB_SENSOR_BMI088) &&
-	       Calib_Usable(CALIB_SENSOR_BMP388) &&
-	       Calib_Finished(CALIB_SENSOR_QMC5883) &&
-	       !CalSvc_Busy();                  /* nothing asked from TFT page 6 still going */
+			Calib_Usable(CALIB_SENSOR_BMP388) &&
+			Calib_Finished(CALIB_SENSOR_QMC5883) &&
+			!CalSvc_Busy();	/* nothing asked from TFT page 6 still going */
 }
 
 const char *Calib_StatusName(Calib_Status_t status){
 	switch(status){
-	case CALIB_WAITING:   return "WAITING";
-	case CALIB_RUNNING:   return "RUNNING";
-	case CALIB_DONE:      return "DONE";
-	case CALIB_STORED:    return "STORED";
-	case CALIB_FAILED:    return "FAILED";
-	case CALIB_NO_SENSOR: return "NO_SENSOR";
-	default:              return "?";
+	case CALIB_WAITING:		return "WAITING";
+	case CALIB_RUNNING:		return "RUNNING";
+	case CALIB_DONE:		return "DONE";
+	case CALIB_STORED:		return "STORED";
+	case CALIB_FAILED:		return "FAILED";
+	case CALIB_NO_SENSOR:	return "NO_SENSOR";
+	default:				return "?";
 	}
 }

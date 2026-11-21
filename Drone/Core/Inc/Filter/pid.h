@@ -4,20 +4,20 @@
 #include <stdint.h>
 
 typedef struct{
-    float kp;
-    float ki;
-    float kd;
+	float kp;
+	float ki;
+	float kd;
 
-    float integralLimit;
-    float outputLimit;
-    float dCutoffHz;
-    float integral;
-    float prevIntegral;
-    float prevMeasurement;
-    float dFiltered;
-    float output;
+	float integralLimit;
+	float outputLimit;
+	float dCutoffHz;
+	float integral;
+	float prevIntegral;
+	float prevMeasurement;
+	float dFiltered;
+	float output;
 
-    uint8_t seeded;
+	uint8_t seeded;
 } PID_t;
 
 void PID_Init(PID_t *pid, float kp, float ki, float kd, float integralLimit, float outputLimit, float dCutoffHz);

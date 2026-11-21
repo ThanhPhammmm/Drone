@@ -5,12 +5,12 @@
 #include <stdint.h>
 
 typedef struct{
-    int16_t  deltaX;        /* counts moved since the previous sample */
-    int16_t  deltaY;
-    uint32_t dt_us;         /* time those counts were gathered over */
-    uint8_t  squal;         /* surface quality */
-    uint8_t  valid;         /* squal good enough to trust */
-    uint32_t timestamp_us;
+	int16_t deltaX;		/* counts moved since the previous sample */
+	int16_t deltaY;
+	uint32_t dt_us;			/* time those counts were gathered over */
+	uint8_t squal;			/* surface quality */
+	uint8_t valid;			/* squal good enough to trust */
+	uint32_t timestamp_us;
 } Flow_Data_t;
 
 extern MutexTopic_t flowTopic;

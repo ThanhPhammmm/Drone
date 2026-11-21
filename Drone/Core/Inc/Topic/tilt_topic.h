@@ -7,10 +7,10 @@
 /* Roll/pitch the position controller asks for (POS_HOLD). The attitude
  * controller flies these instead of the stick angles while active is set. */
 typedef struct{
-    float roll;             /* rad, + = right side down */
-    float pitch;            /* rad, + = nose up */
-    uint8_t active;
-    uint32_t timestamp_us;
+	float roll;		/* rad, + = right side down */
+	float pitch;	/* rad, + = nose up */
+	uint8_t active;
+	uint32_t timestamp_us;
 } Tilt_Data_t;
 
 extern Topic_t tiltTopic;

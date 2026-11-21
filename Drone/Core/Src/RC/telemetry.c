@@ -5,22 +5,22 @@
 #define TLM_ACCEL_G_PER_LSB		(12.0f / 32768.0f)
 #define TLM_FRESH_MS			100U		/* older sample: not valid any more */
 
-_Static_assert(sizeof(TLM_Attitude_t) <= 32, "an nRF24 ACK payload is 32 bytes at most");
-_Static_assert(sizeof(TLM_Output_t)   <= 32, "an nRF24 ACK payload is 32 bytes at most");
-_Static_assert(sizeof(TLM_Sensor_t)   <= 32, "an nRF24 ACK payload is 32 bytes at most");
-_Static_assert(sizeof(TLM_Gps_t)      <= 32, "an nRF24 ACK payload is 32 bytes at most");
+_Static_assert(sizeof(TLM_Attitude_t)	<= 32, "an nRF24 ACK payload is 32 bytes at most");
+_Static_assert(sizeof(TLM_Output_t)		<= 32, "an nRF24 ACK payload is 32 bytes at most");
+_Static_assert(sizeof(TLM_Sensor_t)		<= 32, "an nRF24 ACK payload is 32 bytes at most");
+_Static_assert(sizeof(TLM_Gps_t)		<= 32, "an nRF24 ACK payload is 32 bytes at most");
 
 static int16_t TLM_S16(float v){
 	v = (v >= 0.0f) ? v + 0.5f : v - 0.5f;
-	if(v >  32767.0f) return  32767;
+	if(v > 32767.0f) return 32767;
 	if(v < -32767.0f) return -32767;
 	return (int16_t)v;
 }
 
 static uint16_t TLM_U16(float v){
 	v += 0.5f;
-	if(v > 65535.0f) return 65535;
-	if(v < 0.0f)     return 0;
+	if(v > 65535.0f)	return 65535;
+	if(v < 0.0f)		return 0;
 	return (uint16_t)v;
 }
 
@@ -34,16 +34,16 @@ static uint8_t TLM_AgeMs(uint32_t nowUs, uint32_t stampUs){
 static uint8_t TLM_State(void){
 	uint8_t s = (uint8_t)Arm_GetState() & TLM_STATE_ARM_MASK;
 	s |= ((uint8_t)FlightMode_GetActive() << TLM_STATE_MODE_SHIFT) & TLM_STATE_MODE_MASK;
-	if(Calib_Usable(CALIB_SENSOR_BMI088))  s |= TLM_STATE_IMU_CAL;
-	if(Calib_Usable(CALIB_SENSOR_BMP388))  s |= TLM_STATE_BARO_CAL;
+	if(Calib_Usable(CALIB_SENSOR_BMI088)) s |= TLM_STATE_IMU_CAL;
+	if(Calib_Usable(CALIB_SENSOR_BMP388)) s |= TLM_STATE_BARO_CAL;
 	if(Calib_Usable(CALIB_SENSOR_QMC5883)) s |= TLM_STATE_MAG_CAL;
 	return s;
 }
 
 /* [IMU] [ATT] */
 static uint8_t TLM_BuildAttitude(uint8_t *buf, uint8_t rcSeq, uint8_t state){
-	Attitude_Data_t     att = {0};
-	BMI088_Data_t       imu = {0};
+	Attitude_Data_t att = {0};
+	BMI088_Data_t imu = {0};
 	RateSetpoint_Data_t rsp = {0};
 	float angleSp[2];
 
@@ -54,27 +54,27 @@ static uint8_t TLM_BuildAttitude(uint8_t *buf, uint8_t rcSeq, uint8_t state){
 
 	/* body z seen from the earth frame: cos(roll) * cos(pitch) */
 	float tiltCos = att.q0*att.q0 - att.q1*att.q1 - att.q2*att.q2 + att.q3*att.q3;
-	if(tiltCos >  1.0f) tiltCos =  1.0f;
+	if(tiltCos > 1.0f) tiltCos = 1.0f;
 	if(tiltCos < -1.0f) tiltCos = -1.0f;
 
 	TLM_Attitude_t f;
-	f.magic     = TLM_MAGIC;
-	f.type      = TLM_FRAME_ATTITUDE;
-	f.rcSeq     = rcSeq;
-	f.state     = state;
-	f.gyro[0]   = TLM_S16(att.rollRate  * TLM_RAD2DEG * 10.0f);
-	f.gyro[1]   = TLM_S16(att.pitchRate * TLM_RAD2DEG * 10.0f);
-	f.gyro[2]   = TLM_S16(att.yawRate   * TLM_RAD2DEG * 10.0f);
-	f.accel[0]  = TLM_S16(imu.accel.x * 100.0f);
-	f.accel[1]  = TLM_S16(imu.accel.y * 100.0f);
-	f.accel[2]  = TLM_S16(imu.accel.z * 100.0f);
-	f.roll      = TLM_S16(att.roll  * TLM_RAD2DEG * 100.0f);
-	f.pitch     = TLM_S16(att.pitch * TLM_RAD2DEG * 100.0f);
-	f.yaw       = TLM_S16(att.yaw   * TLM_RAD2DEG * 100.0f);
-	f.rollSp    = TLM_S16(angleSp[0] * TLM_RAD2DEG * 100.0f);
-	f.pitchSp   = TLM_S16(angleSp[1] * TLM_RAD2DEG * 100.0f);
+	f.magic		= TLM_MAGIC;
+	f.type		= TLM_FRAME_ATTITUDE;
+	f.rcSeq		= rcSeq;
+	f.state		= state;
+	f.gyro[0]	= TLM_S16(att.rollRate * TLM_RAD2DEG * 10.0f);
+	f.gyro[1]	= TLM_S16(att.pitchRate * TLM_RAD2DEG * 10.0f);
+	f.gyro[2]	= TLM_S16(att.yawRate * TLM_RAD2DEG * 10.0f);
+	f.accel[0]	= TLM_S16(imu.accel.x * 100.0f);
+	f.accel[1]	= TLM_S16(imu.accel.y * 100.0f);
+	f.accel[2]	= TLM_S16(imu.accel.z * 100.0f);
+	f.roll		= TLM_S16(att.roll * TLM_RAD2DEG * 100.0f);
+	f.pitch		= TLM_S16(att.pitch * TLM_RAD2DEG * 100.0f);
+	f.yaw		= TLM_S16(att.yaw * TLM_RAD2DEG * 100.0f);
+	f.rollSp	= TLM_S16(angleSp[0] * TLM_RAD2DEG * 100.0f);
+	f.pitchSp	= TLM_S16(angleSp[1] * TLM_RAD2DEG * 100.0f);
 	f.yawRateSp = TLM_S16(rsp.yawRate * TLM_RAD2DEG * 10.0f);
-	f.tiltDeg   = (uint8_t)(acosf(tiltCos) * TLM_RAD2DEG + 0.5f);
+	f.tiltDeg	= (uint8_t)(acosf(tiltCos) * TLM_RAD2DEG + 0.5f);
 
 	memcpy(buf, &f, sizeof(f));
 	return (uint8_t)sizeof(f);
@@ -82,9 +82,9 @@ static uint8_t TLM_BuildAttitude(uint8_t *buf, uint8_t rcSeq, uint8_t state){
 
 /* [MOT] [ALT] */
 static uint8_t TLM_BuildOutput(uint8_t *buf, uint8_t rcSeq, uint8_t state){
-	Altitude_Data_t         alt   = {0};
+	Altitude_Data_t alt = {0};
 	AltitudeSetpoint_Data_t altSp = {0};
-	Thrust_Data_t           thr   = {0};
+	Thrust_Data_t thr = {0};
 
 	AltitudeTopic_Copy(&alt, 0);
 	AltitudeSetpointTopic_Copy(&altSp, 0);
@@ -94,20 +94,20 @@ static uint8_t TLM_BuildOutput(uint8_t *buf, uint8_t rcSeq, uint8_t state){
 	MotorOutput_GetPulsesUs(motor);
 
 	TLM_Output_t f;
-	f.magic       = TLM_MAGIC;
-	f.type        = TLM_FRAME_OUTPUT;
-	f.rcSeq       = rcSeq;
-	f.state       = state;
+	f.magic			= TLM_MAGIC;
+	f.type			= TLM_FRAME_OUTPUT;
+	f.rcSeq			= rcSeq;
+	f.state			= state;
 	for(uint8_t i = 0; i < MOTOR_COUNT; i++) f.motor[i] = TLM_U16(motor[i]);
-	f.thrust      = TLM_U16(thr.thrust * 10000.0f);
-	f.hoverThrust = TLM_U16(thr.hoverThrust * 10000.0f);
-	f.altitude    = TLM_S16(alt.altitude * 100.0f);
-	f.altitudeSp  = TLM_S16(altitudeController.holdTarget * 100.0f);  /* = altitude while not holding */
-	f.vz          = TLM_S16(alt.verticalSpeed * 100.0f);
-	f.climbSp     = TLM_S16(altSp.climbRate * 100.0f);
-	f.accelUp     = TLM_S16(alt.accelUp * 100.0f);
-	f.accelBias   = TLM_S16(alt.accelBias * 100.0f);
-	f.aboveFloor  = TLM_S16(alt.aboveFloor * 100.0f);
+	f.thrust		= TLM_U16(thr.thrust * 10000.0f);
+	f.hoverThrust	= TLM_U16(thr.hoverThrust * 10000.0f);
+	f.altitude		= TLM_S16(alt.altitude * 100.0f);
+	f.altitudeSp	= TLM_S16(altitudeController.holdTarget * 100.0f);	/* = altitude while not holding */
+	f.vz			= TLM_S16(alt.verticalSpeed * 100.0f);
+	f.climbSp		= TLM_S16(altSp.climbRate * 100.0f);
+	f.accelUp		= TLM_S16(alt.accelUp * 100.0f);
+	f.accelBias		= TLM_S16(alt.accelBias * 100.0f);
+	f.aboveFloor	= TLM_S16(alt.aboveFloor * 100.0f);
 
 	memcpy(buf, &f, sizeof(f));
 	return (uint8_t)sizeof(f);
@@ -115,11 +115,11 @@ static uint8_t TLM_BuildOutput(uint8_t *buf, uint8_t rcSeq, uint8_t state){
 
 /* [POS] [TOF] [FLOW] [MISC] */
 static uint8_t TLM_BuildSensor(uint8_t *buf, uint8_t rcSeq, uint8_t state, uint16_t rcLost){
-	Position_Data_t pos   = {0};
-	Range_Data_t    range = {0};
-	Flow_Data_t     flow  = {0};
-	Attitude_Data_t att   = {0};
-	BMI088_Data_t   imu   = {0};
+	Position_Data_t pos = {0};
+	Range_Data_t range = {0};
+	Flow_Data_t flow = {0};
+	Attitude_Data_t att = {0};
+	BMI088_Data_t imu = {0};
 
 	PositionTopic_Copy(&pos);
 	RangeTopic_Copy(&range, 0);
@@ -136,28 +136,28 @@ static uint8_t TLM_BuildSensor(uint8_t *buf, uint8_t rcSeq, uint8_t state, uint1
 	float vib = fabsf(sqrtf(ax*ax + ay*ay + az*az) - 1.0f) * BMI088_G * 10.0f;
 
 	TLM_Sensor_t f;
-	f.magic       = TLM_MAGIC;
-	f.type        = TLM_FRAME_SENSOR;
-	f.rcSeq       = rcSeq;
-	f.state       = state;
-	f.valid       = ((range.valid && TLM_AgeMs(now, range.timestamp_us) < TLM_FRESH_MS) ? TLM_VALID_RANGE      : 0) |
-	                ((flow.valid  && TLM_AgeMs(now, flow.timestamp_us)  < TLM_FRESH_MS) ? TLM_VALID_FLOW       : 0) |
-	                (RangeFlow_RangeReady()                                             ? TLM_VALID_RANGE_INIT : 0) |
-	                (RangeFlow_FlowReady()                                              ? TLM_VALID_FLOW_INIT  : 0);
-	f.x           = TLM_S16(pos.x * 100.0f);
-	f.y           = TLM_S16(pos.y * 100.0f);
-	f.xSp         = TLM_S16(positionController.targetX * 100.0f);
-	f.ySp         = TLM_S16(positionController.targetY * 100.0f);
-	f.vx          = TLM_S16(pos.vx * 100.0f);
-	f.vy          = TLM_S16(pos.vy * 100.0f);
-	f.rangeMm     = TLM_U16(range.distance_m * 1000.0f);
-	f.rangeHeight = TLM_S16(range.distance_m * tiltCos * 100.0f);
-	f.rangeStatus = (range.timestamp_us != 0) ? range.rangeStatus : 255;
-	f.flowX       = flow.deltaX;
-	f.flowY       = flow.deltaY;
-	f.squal       = flow.squal;
-	f.vibration   = (uint8_t)((vib > 255.0f) ? 255.0f : vib + 0.5f);
-	f.rcLost      = rcLost;
+	f.magic			= TLM_MAGIC;
+	f.type			= TLM_FRAME_SENSOR;
+	f.rcSeq			= rcSeq;
+	f.state			= state;
+	f.valid			= ((range.valid && TLM_AgeMs(now, range.timestamp_us) < TLM_FRESH_MS) ? TLM_VALID_RANGE : 0) |
+					((flow.valid && TLM_AgeMs(now, flow.timestamp_us) < TLM_FRESH_MS) ? TLM_VALID_FLOW : 0) |
+					(RangeFlow_RangeReady() ? TLM_VALID_RANGE_INIT : 0) |
+					(RangeFlow_FlowReady() ? TLM_VALID_FLOW_INIT : 0);
+	f.x				= TLM_S16(pos.x * 100.0f);
+	f.y				= TLM_S16(pos.y * 100.0f);
+	f.xSp			= TLM_S16(positionController.targetX * 100.0f);
+	f.ySp			= TLM_S16(positionController.targetY * 100.0f);
+	f.vx			= TLM_S16(pos.vx * 100.0f);
+	f.vy			= TLM_S16(pos.vy * 100.0f);
+	f.rangeMm		= TLM_U16(range.distance_m * 1000.0f);
+	f.rangeHeight	= TLM_S16(range.distance_m * tiltCos * 100.0f);
+	f.rangeStatus	= (range.timestamp_us != 0) ? range.rangeStatus : 255;
+	f.flowX			= flow.deltaX;
+	f.flowY			= flow.deltaY;
+	f.squal			= flow.squal;
+	f.vibration		= (uint8_t)((vib > 255.0f) ? 255.0f : vib + 0.5f);
+	f.rcLost		= rcLost;
 
 	memcpy(buf, &f, sizeof(f));
 	return (uint8_t)sizeof(f);
@@ -165,35 +165,35 @@ static uint8_t TLM_BuildSensor(uint8_t *buf, uint8_t rcSeq, uint8_t state, uint1
 
 /* [GPS] */
 static uint8_t TLM_BuildGps(uint8_t *buf, uint8_t rcSeq, uint8_t state){
-	Gps_Data_t      g   = {0};
+	Gps_Data_t g = {0};
 	Position_Data_t pos = {0};
 
 	GpsTopic_Copy(&g, 0);
 	PositionTopic_Copy(&pos);
 
 	uint8_t status = g.fixType & TLM_GPS_FIX_MASK;
-	if(g.fixOk)         status |= TLM_GPS_FIX_OK;
-	if(Gps_Found())     status |= TLM_GPS_FOUND;
-	if(pos.gpsAligned)  status |= TLM_GPS_ALIGNED;
+	if(g.fixOk) status |= TLM_GPS_FIX_OK;
+	if(Gps_Found()) status |= TLM_GPS_FOUND;
+	if(pos.gpsAligned) status |= TLM_GPS_ALIGNED;
 	status |= (uint8_t)((pos.source << TLM_GPS_SOURCE_SHIFT) & TLM_GPS_SOURCE_MASK);
 
 	TLM_Gps_t f;
-	f.magic     = TLM_MAGIC;
-	f.type      = TLM_FRAME_GPS;
-	f.rcSeq     = rcSeq;
-	f.state     = state;
-	f.status    = status;
-	f.numSV     = g.numSV;
-	f.lat       = g.lat;
-	f.lon       = g.lon;
-	f.altMsl    = TLM_S16(g.altMsl * 10.0f);
-	f.hAcc      = TLM_U16(g.hAcc * 100.0f);
-	f.velN      = TLM_S16(g.velN * 100.0f);
-	f.velE      = TLM_S16(g.velE * 100.0f);
-	f.sAcc      = TLM_U16(g.sAcc * 100.0f);
+	f.magic		= TLM_MAGIC;
+	f.type		= TLM_FRAME_GPS;
+	f.rcSeq		= rcSeq;
+	f.state		= state;
+	f.status	= status;
+	f.numSV		= g.numSV;
+	f.lat		= g.lat;
+	f.lon		= g.lon;
+	f.altMsl	= TLM_S16(g.altMsl * 10.0f);
+	f.hAcc		= TLM_U16(g.hAcc * 100.0f);
+	f.velN		= TLM_S16(g.velN * 100.0f);
+	f.velE		= TLM_S16(g.velE * 100.0f);
+	f.sAcc		= TLM_U16(g.sAcc * 100.0f);
 	f.yawOffset = TLM_S16(pos.gpsYawOffset * TLM_RAD2DEG * 100.0f);
-	f.gpsX      = TLM_S16(pos.gpsX * 100.0f);
-	f.gpsY      = TLM_S16(pos.gpsY * 100.0f);
+	f.gpsX		= TLM_S16(pos.gpsX * 100.0f);
+	f.gpsY		= TLM_S16(pos.gpsY * 100.0f);
 
 	memcpy(buf, &f, sizeof(f));
 	return (uint8_t)sizeof(f);
@@ -205,15 +205,15 @@ static uint8_t TLM_BuildCalib(uint8_t *buf, uint8_t rcSeq, uint8_t state){
 	CalSvc_Snapshot(&c);
 
 	TLM_Calib_t f;
-	f.magic      = TLM_MAGIC;
-	f.type       = TLM_FRAME_CALIB;
-	f.rcSeq      = rcSeq;
-	f.state      = state;
-	f.item       = c.item;
-	f.calState   = c.state;
-	f.progress   = c.progress;
-	f.reason     = c.reason;
-	f.itemStatus = c.itemStatus;
+	f.magic			= TLM_MAGIC;
+	f.type			= TLM_FRAME_CALIB;
+	f.rcSeq			= rcSeq;
+	f.state			= state;
+	f.item			= c.item;
+	f.calState		= c.state;
+	f.progress		= c.progress;
+	f.reason		= c.reason;
+	f.itemStatus 	= c.itemStatus;
 	memcpy(f.result, c.result, sizeof(f.result));
 
 	memcpy(buf, &f, sizeof(f));
@@ -227,15 +227,15 @@ uint8_t Telemetry_Build(uint8_t *buf, uint8_t rcSeq, uint16_t rcLost){
 
 	uint8_t len;
 	if(next == TLM_FRAME_ATTITUDE){
-		len  = TLM_BuildAttitude(buf, rcSeq, state);
+		len = TLM_BuildAttitude(buf, rcSeq, state);
 		next = TLM_FRAME_OUTPUT;
 	}
 	else if(next == TLM_FRAME_OUTPUT){
-		len  = TLM_BuildOutput(buf, rcSeq, state);
+		len = TLM_BuildOutput(buf, rcSeq, state);
 		next = TLM_FRAME_SENSOR;
 	}
 	else if(next == TLM_FRAME_SENSOR){
-		len  = TLM_BuildSensor(buf, rcSeq, state, rcLost);
+		len = TLM_BuildSensor(buf, rcSeq, state, rcLost);
 		next = TLM_FRAME_GPS;
 	}
 	else{
@@ -243,7 +243,7 @@ uint8_t Telemetry_Build(uint8_t *buf, uint8_t rcSeq, uint16_t rcLost){
 		static uint8_t calTurn = 0;
 		calTurn ^= 1U;
 		if(Arm_GetState() == DISARMED && calTurn) len = TLM_BuildCalib(buf, rcSeq, state);
-		else                                      len = TLM_BuildGps(buf, rcSeq, state);
+		else len = TLM_BuildGps(buf, rcSeq, state);
 		next = TLM_FRAME_ATTITUDE;
 	}
 	return len;

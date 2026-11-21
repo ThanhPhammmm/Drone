@@ -7,18 +7,18 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-#define PMW3901_SPI             hspi3
-#define PMW3901_CS_PORT         PMW3901_CS_GPIO_Port
-#define PMW3901_CS_PIN          PMW3901_CS_Pin
+#define PMW3901_SPI				hspi3
+#define PMW3901_CS_PORT			PMW3901_CS_GPIO_Port
+#define PMW3901_CS_PIN			PMW3901_CS_Pin
 
-#define PMW3901_SQUAL_MIN       0x19    /* below this the floor has too few features to trust */
+#define PMW3901_SQUAL_MIN		0x19	/* below this the floor has too few features to trust */
 
 typedef struct{
-    PMW3901_Burst_t burst;
-    int16_t  deltaX;
-    int16_t  deltaY;
-    uint8_t  squal;
-    uint8_t  valid;
+	PMW3901_Burst_t burst;
+	int16_t deltaX;
+	int16_t deltaY;
+	uint8_t squal;
+	uint8_t valid;
 } PMW3901_Handle_t;
 
 extern PMW3901_Handle_t pmw3901;

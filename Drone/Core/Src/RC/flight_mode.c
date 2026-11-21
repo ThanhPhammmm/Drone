@@ -30,9 +30,9 @@ float FlightMode_ClimbRate(float throttle){
 	if(t > -FM_ALT_HOLD_DEADBAND && t < FM_ALT_HOLD_DEADBAND) return 0.0f;
 
 	if(t > 0.0f) t = (t - FM_ALT_HOLD_DEADBAND) / (1.0f - FM_ALT_HOLD_DEADBAND);
-	else         t = (t + FM_ALT_HOLD_DEADBAND) / (1.0f - FM_ALT_HOLD_DEADBAND);
+	else t = (t + FM_ALT_HOLD_DEADBAND) / (1.0f - FM_ALT_HOLD_DEADBAND);
 
-	if(t >  1.0f) t =  1.0f;
+	if(t > 1.0f) t = 1.0f;
 	if(t < -1.0f) t = -1.0f;
 
 	return t * FM_MAX_CLIMB_RATE;
