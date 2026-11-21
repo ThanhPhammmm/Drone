@@ -14,6 +14,49 @@ static BaseType_t  IMU_Signal_Init(void) {
     return (imuDmaSem != NULL) ? pdPASS : pdFAIL;
 }
 
+/* ---- calibration asked from the remote (TFT page 6) ---- */
+static uint8_t IMU_CalibHook(uint32_t done, uint32_t total){
+    CalSvc_Progress(RC_CAL_IMU, (uint8_t)(done * 100U / total), NULL);
+    return CalSvc_CancelRequested(RC_CAL_IMU);
+}
+
+static int16_t IMU_Scaled(float v, float scale){
+    float x = v * scale;
+    if(x >  32767.0f) x =  32767.0f;
+    if(x < -32767.0f) x = -32767.0f;
+    return (int16_t)(x + (x >= 0.0f ? 0.5f : -0.5f));
+}
+
+/* Same measurement as at power-on (~20 s still). Moved or cancelled: the
+ * values from before stay in use. */
+static void IMU_RunCalibration(void){
+    BMI088_Calib_t old       = bmi088.calib;
+    Calib_Status_t oldStatus = Calib_GetStatus(CALIB_SENSOR_BMI088);
+
+    Calib_Start(CALIB_SENSOR_BMI088);
+    BMI088_SetCalibHook(IMU_CalibHook);
+    BMI088_Status_t st = BMI088_Calibrate(BMI088_CALIB_DEFAULT_SAMPLES);
+    BMI088_SetCalibHook(NULL);
+
+    if(st != BMI088_OK){
+        uint8_t why = CalSvc_CancelRequested(RC_CAL_IMU) ? TLM_CAL_CANCELLED : TLM_CAL_MOVED;
+        bmi088.calib = old;
+        Calib_SetStatus(CALIB_SENSOR_BMI088, oldStatus);
+        CalSvc_Finish(RC_CAL_IMU, why, NULL);
+        return;
+    }
+    Calib_SetStatus(CALIB_SENSOR_BMI088, CALIB_DONE);
+
+    int16_t r[6];
+    r[0] = IMU_Scaled(bmi088.calib.gyro_bias.x,  1e6f);    /* 1e-6 rad/s */
+    r[1] = IMU_Scaled(bmi088.calib.gyro_bias.y,  1e6f);
+    r[2] = IMU_Scaled(bmi088.calib.gyro_bias.z,  1e6f);
+    r[3] = IMU_Scaled(bmi088.calib.accel_bias.x, 1e4f);    /* 1e-4 m/s^2 */
+    r[4] = IMU_Scaled(bmi088.calib.accel_bias.y, 1e4f);
+    r[5] = IMU_Scaled(bmi088.calib.accel_bias.z, 1e4f);
+    CalSvc_Finish(RC_CAL_IMU, TLM_CAL_OK, r);
+}
+
 void IMUTask(void *argument){
     if(IMU_Signal_Init() != pdPASS){
         Calib_SetStatus(CALIB_SENSOR_BMI088, CALIB_NO_SENSOR);
@@ -50,6 +93,11 @@ void IMUTask(void *argument){
 #endif
     while(1){
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        if(CalSvc_Take(RC_CAL_IMU)){
+            IMU_RunCalibration();       /* no IMU data meanwhile: the drone is disarmed */
+            gyroDtValid = 0;            /* the next sample's dt would span the ~20 s pause */
+            continue;
+        }
         bmi088.data.gyro_updated = false;
         bmi088.data.accel_updated = false;
 

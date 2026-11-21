@@ -9,6 +9,7 @@
 #include "lpf.h"
 #include "timebase.h"
 #include "calibration.h"
+#include "calib_service.h"
 
 void IMUTask(void *argument);
 

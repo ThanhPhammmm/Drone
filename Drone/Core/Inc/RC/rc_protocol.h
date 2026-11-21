@@ -16,6 +16,24 @@ typedef enum{
 } RC_Mode_t;
 
 #define RC_FLAG_ARM         0x01
+/* Calibration (TFT page 6), only acted on while the drone is disarmed:
+ * CAL_MODE is the calibration switch: on, the drone will not arm and a
+ * calibration may start; switched off, a running one is cancelled.
+ * The remote flips CAL_TOKEN once per start request, CAL_ITEM says which one;
+ * CAL_CANCEL is held for ~0.5 s to stop the running one. */
+#define RC_FLAG_CAL_TOKEN       0x02
+#define RC_FLAG_CAL_CANCEL      0x04
+#define RC_FLAG_CAL_ITEM_SHIFT  3
+#define RC_FLAG_CAL_ITEM_MASK   0x18
+#define RC_FLAG_CAL_MODE        0x20
+
+typedef enum{
+	RC_CAL_IMU = 0,         /* gyro bias + level, ~20 s still */
+	RC_CAL_BARO,            /* ground pressure, ~2 s still */
+	RC_CAL_COMPASS,         /* hard-iron offsets, 30 s turning by hand */
+	RC_CAL_FLOW,            /* flow camera counts per radian, rocking by hand */
+	RC_CAL_COUNT
+} RC_CalItem_t;
 
 typedef struct __attribute__((packed)){
     uint8_t  magic;
@@ -28,12 +46,14 @@ typedef struct __attribute__((packed)){
     uint8_t  flags;
 } RC_Packet_t;              /* 12 bytes */
 
-/* Telemetry: one frame per ACK (32 bytes at most), the four in turn */
+/* Telemetry: one frame per ACK (32 bytes at most), the four in turn
+ * (disarmed: every second GPS slot carries the calibration frame instead) */
 #define TLM_MAGIC               0x5A
 #define TLM_FRAME_ATTITUDE      0       /* [IMU] [ATT] */
 #define TLM_FRAME_OUTPUT        1       /* [MOT] [ALT] */
 #define TLM_FRAME_SENSOR        2       /* [POS] [TOF] [FLOW] [MISC] */
 #define TLM_FRAME_GPS           3       /* [GPS] */
+#define TLM_FRAME_CALIB         4       /* calibration state, disarmed only */
 
 /* state byte */
 #define TLM_STATE_ARM_MASK      0x07    /* arm_state_t: 0 DISARMED .. 6 FAILSAFE */
@@ -123,5 +143,51 @@ typedef struct __attribute__((packed)){
     int16_t  yawOffset;         /* 0.01 deg, from north to the level frame's x */
     int16_t  gpsX, gpsY;        /* cm, the GPS fix in the level frame (0 until aligned): compare with x, y */
 } TLM_Gps_t;                    /* 30 bytes */
+
+/* calState */
+#define TLM_CAL_IDLE            0       /* nothing asked since power-on */
+#define TLM_CAL_RUNNING         1
+#define TLM_CAL_DONE            2       /* measured, in use until power-off: copy it into calibration.h */
+#define TLM_CAL_FAILED          3       /* see reason; the old values are kept */
+
+/* reason (with TLM_CAL_FAILED) */
+#define TLM_CAL_OK              0
+#define TLM_CAL_ARMED           1       /* disarm and switch the arm switch off first */
+#define TLM_CAL_MOVED           2       /* IMU: moved while measuring */
+#define TLM_CAL_TURN_MORE       3       /* compass: an axis was not turned far enough */
+#define TLM_CAL_ROCK_MORE       4       /* flow: not rocked enough before the time ran out */
+#define TLM_CAL_BAD_FIT         5       /* flow: counts do not follow the rocking (floor, light, height) */
+#define TLM_CAL_WRONG_SIGN      6       /* flow: an axis sign is wrong (POS_EST_FLOW_*_SIGN) */
+#define TLM_CAL_AXES_SWAPPED    7       /* flow: X/Y swapped (POS_EST_FLOW_SWAP_XY) */
+#define TLM_CAL_UNEVEN          8       /* flow: the two axes disagree by more than 15 % */
+#define TLM_CAL_OUT_OF_RANGE    9       /* flow: far from any sensible value */
+#define TLM_CAL_CANCELLED       10
+#define TLM_CAL_NO_SENSOR       11
+#define TLM_CAL_BUSY            12      /* another calibration is running */
+#define TLM_CAL_SWITCH_OFF      13      /* the calibration switch is off */
+
+/* itemStatus: 2 bits per RC_CalItem_t, item 0 in bits 0-1 */
+#define TLM_CAL_ITEM_NONE       0       /* not calibrated */
+#define TLM_CAL_ITEM_OK         1
+#define TLM_CAL_ITEM_FAIL       2       /* failed, or no sensor */
+#define TLM_CAL_ITEM_RUNNING    3
+
+typedef struct __attribute__((packed)){
+    uint8_t  magic;
+    uint8_t  type;              /* TLM_FRAME_CALIB */
+    uint8_t  rcSeq;
+    uint8_t  state;
+    uint8_t  item;              /* RC_CalItem_t of the last request */
+    uint8_t  calState;          /* TLM_CAL_IDLE .. TLM_CAL_FAILED */
+    uint8_t  progress;          /* 0..100 % */
+    uint8_t  reason;            /* TLM_CAL_OK .. */
+    uint8_t  itemStatus;        /* TLM_CAL_ITEM_* for each item */
+    int16_t  result[6];         /* by item, scaled to copy into calibration.h:
+                                 *   IMU     gyro bias x, y, z 1e-6 rad/s, accel bias x, y, z 1e-4 m/s^2
+                                 *   BARO    ground pressure 0.1 hPa
+                                 *   COMPASS offsets x, y, z raw; while turning: turned x, y, z %
+                                 *   FLOW    counts/rad nose, right, fit nose, right 0.001,
+                                 *           counts/rad to use; while rocking: rocked nose, right % */
+} TLM_Calib_t;                  /* 21 bytes */
 
 #endif /* INC_RC_RC_PROTOCOL_H_ */

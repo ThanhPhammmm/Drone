@@ -9,10 +9,27 @@
 
 #define TX_PERIOD_MS           20    /* 50Hz, matches the drone's RC_TICK_MS */
 #define NRF24_SEND_TIMEOUT_MS  16    /* 6 tries x ~2.3 ms = ~14 ms; must leave room inside TX_PERIOD_MS */
+#define CAL_CANCEL_PACKETS     25    /* cancel is held 0.5 s, so a lost packet does not lose it */
 
 static SemaphoreHandle_t statusMutex;
 static RCTx_Status_t     status;
 static uint8_t           statusValid = 0;
+
+/* calibration request (TFT page 6), in the flags of every packet */
+static volatile uint8_t  calBits;            /* RC_FLAG_CAL_TOKEN + RC_FLAG_CAL_ITEM bits */
+static volatile uint8_t  calCancelLeft;      /* packets still to carry RC_FLAG_CAL_CANCEL */
+
+void RCTx_CalStart(uint8_t item){
+    taskENTER_CRITICAL();
+    uint8_t b = (uint8_t)(calBits ^ RC_FLAG_CAL_TOKEN);     /* a flip = one new request */
+    b = (uint8_t)((b & ~RC_FLAG_CAL_ITEM_MASK) | ((item << RC_FLAG_CAL_ITEM_SHIFT) & RC_FLAG_CAL_ITEM_MASK));
+    calBits = b;
+    taskEXIT_CRITICAL();
+}
+
+void RCTx_CalCancel(void){
+    calCancelLeft = CAL_CANCEL_PACKETS;
+}
 
 uint8_t RCTx_GetStatus(RCTx_Status_t *out){
     if(!statusValid) return 0;
@@ -39,6 +56,8 @@ void RCTxTask(void *argument){
     JOY_Init();
     statusMutex = xSemaphoreCreateMutex();
 
+    uint8_t calSwOn = 0, calSwCount = 0;    /* calibration switch: input with pull-up from CubeMX (rc_tx_task.h) */
+
     RC_Packet_t pkt = {0};
     pkt.magic = RC_PACKET_MAGIC;
     pkt.mode  = RC_MODE_ANGLE;   /* initialization */
@@ -61,6 +80,17 @@ void RCTxTask(void *argument){
         	pkt.mode = RC_MODE_ANGLE;
         }
         //pkt.mode = RC_MODE_ANGLE;
+        /* calibration switch, debounced: a bounce must not cancel a running calibration */
+        uint8_t calSwNow = (HAL_GPIO_ReadPin(CAL_SW_PORT, CAL_SW_PIN) == GPIO_PIN_RESET) ? 1U : 0U;
+        if(calSwNow == calSwOn)                     calSwCount = 0;
+        else if(++calSwCount >= CAL_SW_DEBOUNCE){   calSwOn = calSwNow; calSwCount = 0; }
+
+        pkt.flags |= calBits;                   /* JOY_Read set the arm bit only */
+        if(calSwOn) pkt.flags |= RC_FLAG_CAL_MODE;
+        if(calCancelLeft){
+            pkt.flags |= RC_FLAG_CAL_CANCEL;
+            calCancelLeft--;
+        }
         pkt.seq++;
 
         if(radioOk){

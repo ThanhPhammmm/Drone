@@ -13,8 +13,6 @@
 
 #define PMW3901_SQUAL_MIN       0x19    /* below this the floor has too few features to trust */
 
-#define PMW3901_RAD_PER_COUNT   (1.0f / 500.0f)
-
 typedef struct{
     PMW3901_Burst_t burst;
     int16_t  deltaX;

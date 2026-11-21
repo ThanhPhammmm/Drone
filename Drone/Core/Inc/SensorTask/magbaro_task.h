@@ -10,6 +10,7 @@
 #include <stm32f4xx.h>
 #include "timebase.h"
 #include "calibration.h"
+#include "calib_service.h"
 
 void MagBaroTask(void *argument);
 uint8_t MagBaro_IsCalibrated(void);

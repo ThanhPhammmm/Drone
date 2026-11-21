@@ -73,6 +73,16 @@ typedef struct{
     float    yawOffset;         /* deg, north -> level frame x */
     float    gpsX, gpsY;        /* m, the GPS fix in the level frame */
     uint8_t  posSource;         /* 0 none, 1 flow, 2 GPS */
+
+    /* calibration (TFT page 6), sent only while the drone is disarmed */
+    uint32_t calFrames;         /* calibration frames received */
+    uint32_t calTick;           /* when the last one came */
+    uint8_t  calItem;           /* RC_CalItem_t of the last request */
+    uint8_t  calState;          /* TLM_CAL_IDLE .. TLM_CAL_FAILED */
+    uint8_t  calProgress;       /* % */
+    uint8_t  calReason;         /* TLM_CAL_OK .. */
+    uint8_t  calItemStatus;     /* TLM_CAL_ITEM_* per item, 2 bits each */
+    int16_t  calResult[6];      /* raw, scaled as in TLM_Calib_t */
 } Telemetry_t;
 
 extern Telemetry_t telemetry;

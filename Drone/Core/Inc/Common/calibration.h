@@ -41,6 +41,11 @@
 
 #define CALIB_QMC5883_DURATION_MS	30000U
 
+/* PMW3901: flow counts per radian of turn (the lens and the chip). It turns
+ * counts into speed AND removes the tilt from the flow, so a wrong one makes
+ * every wobble look like a speed. */
+#define CALIB_PMW3901_COUNTS_PER_RAD	590.0f
+
 typedef enum{
 	CALIB_SENSOR_BMI088 = 0,
 	CALIB_SENSOR_BMP388,

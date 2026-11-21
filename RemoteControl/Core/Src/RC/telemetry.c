@@ -145,6 +145,20 @@ void Telemetry_Decode(const uint8_t *buf, uint8_t len){
         telemetry.gpsX          = f.gpsX      * 0.01f;
         telemetry.gpsY          = f.gpsY      * 0.01f;
     }
+    else if(buf[1] == TLM_FRAME_CALIB && len == sizeof(TLM_Calib_t)){
+        TLM_Calib_t f;
+        memcpy(&f, buf, sizeof(f));
+
+        Telemetry_DecodeState(f.state);
+        telemetry.calItem       = f.item;
+        telemetry.calState      = f.calState;
+        telemetry.calProgress   = f.progress;
+        telemetry.calReason     = f.reason;
+        telemetry.calItemStatus = f.itemStatus;
+        memcpy(telemetry.calResult, f.result, sizeof(telemetry.calResult));
+        telemetry.calTick       = xTaskGetTickCount();
+        telemetry.calFrames++;
+    }
     else{
         return;
     }

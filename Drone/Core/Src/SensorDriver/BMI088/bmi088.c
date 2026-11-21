@@ -255,6 +255,13 @@ void BMI088_Gyro_Convert(void){
     bmi088.data.gyro.z = gz - bmi088.calib.gyro_bias.z;
 }
 
+/* called every 100 samples while calibrating: progress, and 1 = stop now */
+static uint8_t (*calibHook)(uint32_t done, uint32_t total);
+
+void BMI088_SetCalibHook(uint8_t (*hook)(uint32_t done, uint32_t total)){
+    calibHook = hook;
+}
+
 BMI088_Status_t BMI088_Calibrate(uint32_t numSamples){
     BMI088_Status_t status;
 
@@ -301,6 +308,8 @@ BMI088_Status_t BMI088_Calibrate(uint32_t numSamples){
 
             a_mean[k] += (a_sample[k] - a_mean[k]) / (float)i;
         }
+
+        if(calibHook && (i % 100U) == 0U && calibHook(i, numSamples)) return BMI088_ERROR;
 
         vTaskDelay(pdMS_TO_TICKS(2));
     }

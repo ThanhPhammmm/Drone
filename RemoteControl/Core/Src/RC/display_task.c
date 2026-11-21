@@ -19,10 +19,9 @@
 #define ROW_HEADER          0
 #define ROW_FOOTER          (ROWS - 1)
 
-#define BTN_TICK_MS         5U      /* button sampled by its own task, never blocked by drawing */
-#define BTN_DEBOUNCE_TICKS  4U      /* 20 ms stable before a change counts */
-#define BTN_LONG_PRESS_MS   1000U
-#define BTN_QUEUE_LEN       8U
+#define BTN_TICK_MS         5U      /* buttons sampled by their own task, never blocked by drawing */
+#define BTN_DEBOUNCE_TICKS  10U      /* 20 ms stable before a change counts */
+#define BTN_QUEUE_LEN       6U
 #define DISP_REFRESH_MS     200U    /* 5 Hz */
 #define DISP_REFRESH_RC_MS  100U    /* 10 Hz on the RC page */
 #define DISP_STALE_MS       500U    /* telemetry older than this is shown as "--" */
@@ -33,13 +32,16 @@
 #define VIB_HIGH            15.0f
 #define MOTOR_WARN_US       1900U
 #define MOTOR_MAX_US        1990U
+#define CAL_STALE_MS        1500U   /* no calibration frame this long: the drone is armed, or out of reach */
+#define CAL_ASK_MS          2000U   /* "STARTING..." at most this long after a start */
+#define CAL_ASK_FRAMES      3U      /* calibration frames until the drone's answer shows */
 
-typedef enum{ PAGE_STATUS = 0, PAGE_RC, PAGE_ATTITUDE, PAGE_HEIGHT, PAGE_GPS, PAGE_COUNT } Page_t;
-typedef enum{ BTN_SHORT = 1, BTN_LONG } BtnEvent_t;
+typedef enum{ PAGE_STATUS = 0, PAGE_RC, PAGE_ATTITUDE, PAGE_HEIGHT, PAGE_GPS, PAGE_CALIB, PAGE_COUNT } Page_t;
+typedef enum{ BTN_PREV = 0, BTN_NEXT, BTN_OK, BTN_COUNT } BtnEvent_t;
 
 static QueueHandle_t btnQueue;
 
-static const char *const pageName[PAGE_COUNT] = { "STATUS", "RC", "ATTITUDE", "HEIGHT/POS", "GPS/LINK" };
+static const char *const pageName[PAGE_COUNT] = { "STATUS", "RC", "ATTITUDE", "HEIGHT/POS", "GPS/LINK", "CALIBRATE" };
 static const char *const armName[7]  = { "DISARMED", "ARMING", "READY", "TAKEOFF", "FLYING", "LANDING", "FAILSAFE" };
 static const char *const armShort[7] = { "OFF", "ARM", "RDY", "TKO", "FLY", "LND", "FS!" };
 static const char *const modeName[3] = { "ANGLE", "ALT HOLD", "POS HOLD" };
@@ -202,7 +204,8 @@ static void Header(Page_t page){
     else                          Put(36, ROW_HEADER, "---", C_GREY);
 }
 
-static void Footer(void){
+/* 1 = a warning took the footer */
+static uint8_t Footer(Page_t page){
     const char *msg = NULL;
     uint8_t severe = 0;
     if(!fresh)                                      { msg = "NO TELEMETRY";            severe = 1; }
@@ -212,14 +215,17 @@ static void Footer(void){
     else if(Flying() && tlm.thrust > THRUST_HIGH)   { msg = "THRUST HIGH - LAND SOON"; }
     else if(tlm.vibration > VIB_HIGH)               { msg = "VIBRATION HIGH"; }
     else if(Flying() && rcValid && rc.lastSent.mode != tlm.mode){ msg = "MODE FALLBACK"; }
+    else if(page != PAGE_CALIB && rcValid && (rc.lastSent.flags & RC_FLAG_CAL_MODE))
+                                                    { msg = "CAL SWITCH ON - CANNOT ARM"; }
     else if(rcValid && (rc.lastSent.flags & RC_FLAG_ARM) && tlm.armState == 0 &&
             rc.lastSent.throttle > 20U)             { msg = "THROTTLE NOT LOW - CANNOT ARM"; }
-    if(msg == NULL) return;
+    if(msg == NULL) return 0;
 
     uint16_t bg = severe ? C_RED : C_BLACK;
     uint16_t fg = severe ? C_WHITE : C_YELLOW;
     for(uint8_t c = 0; c < COLS; c++) next.bg[ROW_FOOTER][c] = bg;
     Put(0, ROW_FOOTER, msg, fg);
+    return 1;
 }
 
 static void PageStatus(void){
@@ -303,6 +309,9 @@ static void PageRc(void){
     Put(9, 8, armSw ? "ON " : "OFF", armSw ? C_GREEN : C_WHITE);
     Put(0, 9, "Mode sw:", C_GREY);
     if(rc.lastSent.mode < 3) Put(9, 9, modeName[rc.lastSent.mode], C_WHITE);
+    Put(16, 8, "Cal sw :", C_GREY);
+    uint8_t calSw = (rc.lastSent.flags & RC_FLAG_CAL_MODE) ? 1U : 0U;
+    Put(25, 8, calSw ? "ON " : "OFF", calSw ? C_YELLOW : C_WHITE);
     Put(0, 10, "Packets:", C_GREY);  PutL(9, 10, 3, packetsPerSec, 0, 0, C_WHITE);  Put(12, 10, "/s", C_GREY);
     Put(16, 10, "acked", C_GREY);    PutL(22, 10, 3, tlm.linkQuality, 0, 0, tlm.linkQuality >= LINK_LOW_PCT ? C_GREEN : C_RED);
     Put(25, 10, "%", C_GREY);
@@ -409,6 +418,340 @@ static void PageGps(void){
     Put(0, 11, "Frames :", C_GREY);  PutL(9, 11, 8, (float)tlm.frames, 0, 0, C_WHITE);
 }
 
+/* ------------------------------------------------------------ page 6: calibration
+ * PREV / NEXT: move the arrow. OK: start it (EXIT: back to page 1), or cancel
+ * the one running. The drone measures and uses the result at once, until
+ * power-off; failed or cancelled keeps the values from before. */
+
+#define CAL_MENU_EXIT       RC_CAL_COUNT            /* the line after the four sensors */
+#define CAL_MENU_COUNT      (RC_CAL_COUNT + 1)
+#define ROW_CAL_MENU        1                       /* rows 1-5 */
+#define ROW_CAL_HELP        7                       /* rows 7-9 */
+#define ROW_CAL_STATUS      10
+#define ROW_CAL_BAR         11
+#define ROW_CAL_RESULT      12                      /* rows 12-13 */
+
+static const char *const calName[CAL_MENU_COUNT] = { "IMU", "BARO", "COMPASS", "FLOW", "EXIT" };
+static const char *const calWhat[CAL_MENU_COUNT] = {
+    "gyro + level", "ground height", "heading offsets", "camera scale", "back to page 1"
+};
+/* how to get an accurate result: up to 3 screens of 3 lines, shown in turn */
+#define CAL_TIP_SCREENS     3
+#define CAL_TIP_MS          4000U   /* each screen this long */
+static const char *const calTips[CAL_MENU_COUNT][CAL_TIP_SCREENS][3] = {
+    {   /* IMU */
+        { "1. Props off. Power on and wait ~1 min", "   so the sensor is warm.",               "2. Stand it on its legs on a level" },
+        { "   table: check with a spirit level or", "   a phone, the table becomes level.",   "3. No touching, no fan, no bumping." },
+        { "4. Press OK and step away.",             "   Takes about 20 s.",                   "" },
+    },
+    {   /* BARO */
+        { "1. Put the drone where it takes off,",   "   out of any draught (fan, window,",    "   air conditioner)." },
+        { "2. Do it just before flying: the air",   "   pressure drifts with the weather.",   "3. Press OK. Takes about 2 s." },
+        { NULL, NULL, NULL },
+    },
+    {   /* COMPASS */
+        { "1. Props off, battery in as in flight",  "   (its wires bend the field too).",     "2. Go 1 m from metal, PCs, phones," },
+        { "   speakers. Outdoors is best.",         "3. Press OK, then turn the drone",       "   slowly for 30 s:" },
+        { "   nose down + full turn, nose up +",    "   full turn, each side down + turn,",   "   upside down, until X Y Z are 100%." },
+    },
+    {   /* FLOW */
+        { "1. Props off. Floor with a pattern and", "   good light, no plain shiny tiles:",   "   page 4 Flow Q should be over 100." },
+        { "2. Hold the drone level ~1 m above it,", "   camera down, away from your feet.",   "3. Press OK, then rock it:" },
+        { "   left-right ~20 deg, ~1 per second,",  "   then forward-back the same way.",     "   Pivot on the camera, do not slide." },
+    },
+    {   /* EXIT */
+        { "Press OK to go back to page 1.",        "",                                       "" },
+        { NULL, NULL, NULL },
+        { NULL, NULL, NULL },
+    },
+};
+
+/* while it runs: what to do now */
+static const char *const calDoing[RC_CAL_COUNT][3] = {
+    { "Do not touch the drone or the table.",   "Keep the room still: no fan, no steps.",  "Moving it ends this with MOVED." },
+    { "Keep it still, no air blowing on it.",   "",                                        "" },
+    { "Turn it slowly through every direction:", "nose down/up, each side down, upside",   "down. Watch X Y Z below reach 100 %." },
+    { "Rock left-right until roll is 100 %,",   "then forward-back until pitch is 100 %.", "Smooth, ~20 deg, camera over one spot." },
+};
+
+static uint8_t CalTipScreens(uint8_t item){
+    uint8_t n = 0;
+    while(n < CAL_TIP_SCREENS && calTips[item][n][0] != NULL) n++;
+    return n;
+}
+
+static void Snapshot(void);
+
+static uint8_t    calSel;               /* the arrow: RC_CalItem_t, or CAL_MENU_EXIT */
+static uint8_t    calTipScreen;         /* the tips screen shown now */
+static TickType_t calTipTick;
+static uint8_t    calAsked;             /* a start was sent, the drone's answer is not in yet */
+static uint8_t    calAskItem;
+static TickType_t calAskTick;
+static uint32_t   calAskFrames;
+
+static uint8_t CalFresh(void){
+    return tlm.calFrames > 0U && (xTaskGetTickCount() - tlm.calTick) < pdMS_TO_TICKS(CAL_STALE_MS);
+}
+
+static uint8_t CalRunning(void){
+    return CalFresh() && tlm.calState == TLM_CAL_RUNNING;
+}
+
+static uint8_t CalAsking(void){
+    if(!calAsked) return 0;
+    if((xTaskGetTickCount() - calAskTick) >= pdMS_TO_TICKS(CAL_ASK_MS) ||
+       (tlm.calFrames - calAskFrames) >= CAL_ASK_FRAMES || CalRunning()){
+        calAsked = 0;
+    }
+    return calAsked;
+}
+
+/* why a start would be refused, or NULL */
+static const char *CalBlocked(void){
+    if(!rcValid || !(rc.lastSent.flags & RC_FLAG_CAL_MODE)) return "TURN CAL SWITCH ON";
+    if(!fresh)                                              return "NO LINK TO THE DRONE";
+    if(tlm.armState != 0)                                   return "DISARM FIRST";
+    if(rcValid && (rc.lastSent.flags & RC_FLAG_ARM))        return "ARM SWITCH OFF FIRST";
+    if(!CalFresh())                                         return "NO ANSWER FROM DRONE";
+    return NULL;
+}
+
+static const char *CalReasonText(uint8_t r){
+    switch(r){
+    case TLM_CAL_ARMED:         return "DISARM FIRST";
+    case TLM_CAL_MOVED:         return "MOVED, KEEP IT STILL";
+    case TLM_CAL_TURN_MORE:     return "TURN IT MORE";
+    case TLM_CAL_ROCK_MORE:     return "ROCK IT MORE";
+    case TLM_CAL_BAD_FIT:       return "NOISY - SEE TIPS 1";
+    case TLM_CAL_WRONG_SIGN:    return "AXIS SIGN WRONG";
+    case TLM_CAL_AXES_SWAPPED:  return "X/Y AXES SWAPPED";
+    case TLM_CAL_UNEVEN:        return "AXES DISAGREE, AGAIN";
+    case TLM_CAL_OUT_OF_RANGE:  return "VALUE OUT OF RANGE";
+    case TLM_CAL_CANCELLED:     return "CANCELLED";
+    case TLM_CAL_NO_SENSOR:     return "NO SENSOR";
+    case TLM_CAL_BUSY:          return "BUSY, TRY AGAIN";
+    case TLM_CAL_SWITCH_OFF:    return "CAL SWITCH WAS OFF";
+    default:                    return "?";
+    }
+}
+
+static uint16_t ColorPct(int16_t pct){
+    return (pct >= 100) ? C_GREEN : C_YELLOW;
+}
+
+/* [####################] 100% */
+static void CalBar(uint8_t row, uint8_t pct, uint16_t fill){
+    if(pct > 100U) pct = 100U;
+    uint8_t n = (uint8_t)((pct * 20U + 50U) / 100U);
+    Put(0, row, "[", C_GREY);
+    for(uint8_t i = 0; i < 20U; i++) Put((uint8_t)(1U + i), row, (i < n) ? "#" : ".", (i < n) ? fill : C_GREY);
+    Put(21, row, "]", C_GREY);
+    PutL(23, row, 3, pct, 0, 0, C_WHITE);
+    Put(26, row, "%", C_GREY);
+}
+
+/* the numbers for one item, rows 12-13; r is TLM_Calib_t.result */
+static void CalResult(uint8_t item, uint8_t state, uint8_t reason, const int16_t *r){
+    uint8_t row = ROW_CAL_RESULT;
+    uint8_t done = (state == TLM_CAL_DONE);
+
+    switch(item){
+    case RC_CAL_IMU:
+        if(!done) return;
+        Put(0, row, "gyro", C_GREY);
+        /* columns 5-13, 15-23, 25-33: a value is at most 9 characters, so one blank between */
+        PutL(5,  row, 9, r[0] * 1e-6f, 6, 0, C_WHITE);
+        PutL(15, row, 9, r[1] * 1e-6f, 6, 0, C_WHITE);
+        PutL(25, row, 9, r[2] * 1e-6f, 6, 0, C_WHITE);
+        Put(35, row, "rad/s", C_GREY);
+        Put(0, row + 1, "accel", C_GREY);
+        PutL(5,  row + 1, 9, r[3] * 1e-4f, 4, 1, C_WHITE);
+        PutL(15, row + 1, 9, r[4] * 1e-4f, 4, 1, C_WHITE);
+        PutL(25, row + 1, 9, r[5] * 1e-4f, 4, 1, C_WHITE);
+        Put(35, row + 1, "m/s2", C_GREY);
+        break;
+
+    case RC_CAL_BARO:
+        if(!done) return;
+        Put(0, row, "ground", C_GREY);
+        PutL(7, row, 7, r[0] * 0.1f, 1, 0, C_WHITE);
+        Put(15, row, "hPa", C_GREY);
+        Put(0, row + 1, "this height is 0 m now", C_GREY);
+        break;
+
+    case RC_CAL_COMPASS:
+        if(done){
+            Put(0, row, "offset", C_GREY);
+            Put(7, row, "X", C_GREY);   PutL(9,  row, 6, r[0], 0, 1, C_WHITE);
+            Put(16, row, "Y", C_GREY);  PutL(18, row, 6, r[1], 0, 1, C_WHITE);
+            Put(25, row, "Z", C_GREY);  PutL(27, row, 6, r[2], 0, 1, C_WHITE);
+            Put(34, row, "raw", C_GREY);
+        }
+        else if(state == TLM_CAL_RUNNING || reason == TLM_CAL_TURN_MORE){
+            Put(0, row, "turned", C_GREY);
+            Put(7, row, "X", C_GREY);   PutL(9,  row, 3, r[0], 0, 0, ColorPct(r[0]));  Put(12, row, "%", C_GREY);
+            Put(15, row, "Y", C_GREY);  PutL(17, row, 3, r[1], 0, 0, ColorPct(r[1]));  Put(20, row, "%", C_GREY);
+            Put(23, row, "Z", C_GREY);  PutL(25, row, 3, r[2], 0, 0, ColorPct(r[2]));  Put(28, row, "%", C_GREY);
+            Put(0, row + 1, "turn until all three are 100 %", C_GREY);
+        }
+        break;
+
+    case RC_CAL_FLOW:
+        /* roll = left-right rocking (r[1], r[3]), pitch = forward-back (r[0], r[2]) */
+        if(state == TLM_CAL_RUNNING || reason == TLM_CAL_ROCK_MORE){
+            Put(0, row, "rocked", C_GREY);
+            Put(7, row, "roll", C_GREY);    PutL(12, row, 3, r[1], 0, 0, ColorPct(r[1]));  Put(15, row, "%", C_GREY);
+            Put(18, row, "pitch", C_GREY);  PutL(24, row, 3, r[0], 0, 0, ColorPct(r[0]));  Put(27, row, "%", C_GREY);
+            Put(0, row + 1, "fit", C_GREY);
+            Put(7, row + 1, "roll", C_GREY);    PutL(12, row + 1, 5, r[3] * 0.001f, 2, 0, C_WHITE);
+            Put(18, row + 1, "pitch", C_GREY);  PutL(24, row + 1, 5, r[2] * 0.001f, 2, 0, C_WHITE);
+            Put(30, row + 1, "want 0.85", C_GREY);
+        }
+        else if(done || (state == TLM_CAL_FAILED && reason != TLM_CAL_CANCELLED &&
+                         reason != TLM_CAL_ARMED && reason != TLM_CAL_BUSY && reason != TLM_CAL_NO_SENSOR)){
+            /* counts per radian the camera really gives (the drone started with 500) */
+            Put(0, row, "c/rad", C_GREY);
+            Put(7, row, "roll", C_GREY);    PutL(12, row, 5, r[1], 0, 0, C_WHITE);
+            Put(18, row, "pitch", C_GREY);  PutL(24, row, 5, r[0], 0, 0, C_WHITE);
+            Put(30, row, "use", C_GREY);    PutL(34, row, 5, r[4], 0, 0, done ? C_GREEN : C_GREY);
+            Put(0, row + 1, "fit", C_GREY);
+            Put(7, row + 1, "roll", C_GREY);    PutL(12, row + 1, 5, r[3] * 0.001f, 2, 0, C_WHITE);
+            Put(18, row + 1, "pitch", C_GREY);  PutL(24, row + 1, 5, r[2] * 0.001f, 2, 0, C_WHITE);
+        }
+        break;
+
+    default:
+        break;
+    }
+}
+
+static void PageCalib(void){
+    uint8_t calFresh = CalFresh();
+    uint8_t running  = CalRunning();
+
+    /* menu: arrow, name, what it sets, status the drone reports */
+    for(uint8_t i = 0; i < CAL_MENU_COUNT; i++){
+        uint8_t row = (uint8_t)(ROW_CAL_MENU + i);
+        uint8_t sel = (i == calSel);
+        if(sel) Put(1, row, ">", C_CYAN);
+        Put(3, row, calName[i], sel ? C_CYAN : C_WHITE);
+        Put(12, row, calWhat[i], C_GREY);
+        if(i == CAL_MENU_EXIT) continue;
+        uint8_t st = calFresh ? (uint8_t)((tlm.calItemStatus >> (2U * i)) & 0x03U) : TLM_CAL_ITEM_NONE;
+        switch(st){
+        case TLM_CAL_ITEM_OK:      Put(35, row, "OK",   C_GREEN);  break;
+        case TLM_CAL_ITEM_FAIL:    Put(35, row, "FAIL", C_RED);    break;
+        case TLM_CAL_ITEM_RUNNING: Put(35, row, "RUN",  C_YELLOW); break;
+        default:                   Put(35, row, "--",   C_GREY);   break;
+        }
+    }
+    for(uint8_t c = 0; c < COLS; c++) Put(c, ROW_CAL_MENU + CAL_MENU_COUNT, "-", C_GREY);
+
+    /* while one runs the arrow stays on it */
+    uint8_t item = calSel;
+    uint8_t mine = calFresh && tlm.calItem == item;
+
+    if(item < RC_CAL_COUNT && running && mine){
+        for(uint8_t k = 0; k < 3; k++) Put(0, (uint8_t)(ROW_CAL_HELP + k), calDoing[item][k], C_YELLOW);
+    }
+    else{
+        uint8_t n = CalTipScreens(item);
+        if((xTaskGetTickCount() - calTipTick) >= pdMS_TO_TICKS(CAL_TIP_MS)){
+            calTipTick   = xTaskGetTickCount();
+            calTipScreen = (uint8_t)((calTipScreen + 1U) % (n ? n : 1U));
+        }
+        if(calTipScreen >= n) calTipScreen = 0;
+        for(uint8_t k = 0; k < 3; k++) Put(0, (uint8_t)(ROW_CAL_HELP + k), calTips[item][calTipScreen][k], C_WHITE);
+        if(n > 1U){
+            char tag[12] = " tips 1/1 ";
+            tag[6] = (char)('1' + calTipScreen);
+            tag[8] = (char)('0' + n);
+            Put(30, ROW_CAL_MENU + CAL_MENU_COUNT, tag, C_CYAN);
+        }
+    }
+    if(item == CAL_MENU_EXIT) return;
+
+    Put(0, ROW_CAL_STATUS, "Status :", C_GREY);
+    const char *blocked = CalBlocked();
+    if(running){
+        if(mine) Put(9, ROW_CAL_STATUS, "RUNNING", C_YELLOW);
+        else{
+            Put(9, ROW_CAL_STATUS, "WAIT:", C_GREY);
+            if(tlm.calItem < RC_CAL_COUNT) Put(15, ROW_CAL_STATUS, calName[tlm.calItem], C_GREY);
+            Put(24, ROW_CAL_STATUS, "IS RUNNING", C_GREY);
+        }
+    }
+    else if(CalAsking() && calAskItem == item)     Put(9, ROW_CAL_STATUS, "STARTING...", C_YELLOW);
+    else if(blocked){
+        Put(9, ROW_CAL_STATUS, "BLOCKED:", C_RED);
+        Put(18, ROW_CAL_STATUS, blocked, C_RED);
+    }
+    else if(mine && tlm.calState == TLM_CAL_DONE){
+        Put(9, ROW_CAL_STATUS, "DONE - IN USE NOW", C_GREEN);
+        if(item == RC_CAL_IMU){
+            /* the accel offset it took includes the table's tilt: over 2 deg, check the table */
+            float ax = tlm.calResult[3] * 1e-4f, ay = tlm.calResult[4] * 1e-4f;
+            float tilt = atan2f(sqrtf(ax * ax + ay * ay), 9.80665f) * 57.29578f;
+            Put(27, ROW_CAL_STATUS, "tilt", C_GREY);
+            PutL(32, ROW_CAL_STATUS, 4, tilt, 1, 0, tilt > 2.0f ? C_YELLOW : C_GREEN);
+            Put(37, ROW_CAL_STATUS, "deg", C_GREY);
+        }
+    }
+    else if(mine && tlm.calState == TLM_CAL_FAILED){
+        Put(9, ROW_CAL_STATUS, "FAILED:", C_RED);
+        Put(17, ROW_CAL_STATUS, CalReasonText(tlm.calReason), C_RED);
+    }
+    else                                           Put(9, ROW_CAL_STATUS, "READY", C_WHITE);
+
+    if(mine && tlm.calState == TLM_CAL_RUNNING)    CalBar(ROW_CAL_BAR, tlm.calProgress, C_YELLOW);
+    else if(mine && tlm.calState == TLM_CAL_DONE)  CalBar(ROW_CAL_BAR, 100, C_GREEN);
+    else                                           CalBar(ROW_CAL_BAR, 0, C_GREY);
+
+    if(mine) CalResult(item, tlm.calState, tlm.calReason, tlm.calResult);
+}
+
+/* the footer on page 6 when no warning needs it */
+static void CalHint(void){
+    const char *hint;
+    if(CalRunning())                 hint = "OK: CANCEL";
+    else if(calSel == CAL_MENU_EXIT) hint = "PREV/NEXT: ITEM   OK: PAGE 1";
+    else if(!rcValid || !(rc.lastSent.flags & RC_FLAG_CAL_MODE))
+                                     hint = "VIEW ONLY: CAL SWITCH IS OFF";
+    else                             hint = "PREV/NEXT: ITEM   OK: START";
+    Put(0, ROW_FOOTER, hint, C_GREY);
+}
+
+/* the button on page 6; 1 = leave the page */
+static uint8_t CalButton(BtnEvent_t ev){
+    Snapshot();                             /* decide on the drone's state now, not at the last refresh */
+    if(ev == BTN_NEXT || ev == BTN_PREV){
+        if(!CalRunning()){                  /* while one runs the arrow stays on it */
+            calSel       = (ev == BTN_NEXT) ? (uint8_t)((calSel + 1U) % CAL_MENU_COUNT)
+                                            : (uint8_t)((calSel + CAL_MENU_COUNT - 1U) % CAL_MENU_COUNT);
+            calTipScreen = 0;
+            calTipTick   = xTaskGetTickCount();
+        }
+        return 0;
+    }
+    /* OK */
+    if(CalRunning()){
+        RCTx_CalCancel();
+        return 0;
+    }
+    if(calSel == CAL_MENU_EXIT){
+        calSel = 0;
+        return 1;
+    }
+    if(CalBlocked() != NULL) return 0;      /* the status line says why */
+    RCTx_CalStart(calSel);
+    calAsked     = 1;
+    calAskItem   = calSel;
+    calAskTick   = xTaskGetTickCount();
+    calAskFrames = tlm.calFrames;
+    return 0;
+}
+
 /* ------------------------------------------------------------ refresh */
 
 static void ClearScreen(Screen_t *s){
@@ -466,9 +809,10 @@ static void Refresh(Page_t page){
     case PAGE_ATTITUDE: PageAttitude(); break;
     case PAGE_HEIGHT:   PageHeight();   break;
     case PAGE_GPS:      PageGps();      break;
+    case PAGE_CALIB:    PageCalib();    break;
     default:            break;
     }
-    Footer();
+    if(!Footer(page) && page == PAGE_CALIB) CalHint();
     Flush();
 }
 
@@ -493,39 +837,32 @@ static void UpdateStats(void){
     for(uint8_t i = 0; i < 60; i++) if(linkMinSec[i] < linkMin60) linkMin60 = linkMinSec[i];
 }
 
+/* PREV, NEXT, OK: each debounced on its own; an event goes out when a press
+ * is confirmed (20 ms down), so the page reacts at once. */
 static void ButtonTask(void *argument){
     (void)argument;
-    uint8_t    stable = 0, debounce = 0, longSent = 0;
-    uint32_t   heldMs = 0;
+    static GPIO_TypeDef *const port[BTN_COUNT] = { BTN_PREV_PORT, BTN_NEXT_PORT, BTN_OK_PORT };
+    static const uint16_t      pin[BTN_COUNT]  = { BTN_PREV_PIN,  BTN_NEXT_PIN,  BTN_OK_PIN  };
+
+    /* the pins are inputs with pull-up from CubeMX (gpio.c) */
+    uint8_t    stable[BTN_COUNT]   = {0};
+    uint8_t    debounce[BTN_COUNT] = {0};
     TickType_t wake = xTaskGetTickCount();
 
     while(1){
         vTaskDelayUntil(&wake, pdMS_TO_TICKS(BTN_TICK_MS));
 
-        uint8_t pressed = (HAL_GPIO_ReadPin(DISP_BTN_PORT, DISP_BTN_PIN) == GPIO_PIN_RESET);
-        if(pressed != stable){
-            if(++debounce >= BTN_DEBOUNCE_TICKS){
-                stable   = pressed;
-                debounce = 0;
-                if(stable){
-                    heldMs   = 0;
-                    longSent = 0;
-                }
-                else if(!longSent){
-                    BtnEvent_t ev = BTN_SHORT;          /* released before 1 s */
-                    xQueueSend(btnQueue, &ev, 0);
-                }
+        for(uint8_t b = 0; b < BTN_COUNT; b++){
+            uint8_t pressed = (HAL_GPIO_ReadPin(port[b], pin[b]) == GPIO_PIN_RESET);
+            if(pressed == stable[b]){
+                debounce[b] = 0;
+                continue;
             }
-        }
-        else{
-            debounce = 0;
-        }
-
-        if(stable && !longSent){
-            heldMs += BTN_TICK_MS;
-            if(heldMs >= BTN_LONG_PRESS_MS){
-                longSent = 1;
-                BtnEvent_t ev = BTN_LONG;               /* fires while still held */
+            if(++debounce[b] < BTN_DEBOUNCE_TICKS) continue;
+            stable[b]   = pressed;
+            debounce[b] = 0;
+            if(pressed){
+                BtnEvent_t ev = (BtnEvent_t)b;
                 xQueueSend(btnQueue, &ev, 0);
             }
         }
@@ -558,8 +895,31 @@ void DisplayTask(void *argument){
 
         BtnEvent_t ev;
         if(xQueueReceive(btnQueue, &ev, wait) == pdTRUE){
-            if(ev == BTN_SHORT) page = (Page_t)((page + 1) % PAGE_COUNT);
-            else                page = PAGE_STATUS;
+            if(page == PAGE_CALIB){
+                if(CalButton(ev)) page = PAGE_STATUS;
+            }
+            else if(ev == BTN_NEXT) page = (Page_t)((page + 1) % PAGE_COUNT);
+            else if(ev == BTN_PREV) page = (Page_t)((page + PAGE_COUNT - 1) % PAGE_COUNT);
+            else                    page = PAGE_STATUS;         /* OK: home */
+        }
+
+        /* calibration switch: on opens page 6, off goes back to the page shown before
+         * it was switched on (the drone cancels a running calibration). Nothing else
+         * changes the page by itself. */
+        {
+            static uint8_t calSwLast     = 0;
+            static Page_t  pageBeforeCal = PAGE_STATUS;
+            RCTx_Status_t now;
+            uint8_t calSw = RCTx_GetStatus(&now) && (now.lastSent.flags & RC_FLAG_CAL_MODE);
+            if(calSw && !calSwLast){
+                pageBeforeCal = page;           /* already on page 6: switching off stays there */
+                page          = PAGE_CALIB;
+                calSel = 0;
+            }
+            else if(!calSw && calSwLast && page == PAGE_CALIB){
+                page = pageBeforeCal;
+            }
+            calSwLast = calSw;
         }
 
         uint8_t lq = telemetry.linkQuality;             /* lowest link quality this second */

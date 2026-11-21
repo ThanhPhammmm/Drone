@@ -18,6 +18,7 @@
 #include "magbaro_task.h"
 #include "timebase.h"
 #include "calibration.h"
+#include "calib_service.h"
 #include "thrust_topic.h"
 #include "position_topic.h"
 
