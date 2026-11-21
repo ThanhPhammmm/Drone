@@ -7,9 +7,9 @@
 typedef struct{
 	float rollRate;
 	float pitchRate;
-    float yawRate;
+	float yawRate;
 
-    uint32_t timestamp_us;
+	uint32_t timestamp_us;
 
 } RateSetpoint_Data_t;
 

@@ -10,9 +10,9 @@
 #define QMC5883_CALIB_MIN_SPAN		(0.25f * QMC5883_LSB_PER_GAUSS_8G)
 
 typedef struct{
-    QMC5883_Raw_t	raw;
-    QMC5883_Field_t field;
-    QMC5883_Calib_t calib;
+	QMC5883_Raw_t	raw;
+	QMC5883_Field_t field;
+	QMC5883_Calib_t calib;
 } QMC5883_Handle_t;
 
 extern QMC5883_Handle_t qmc5883;

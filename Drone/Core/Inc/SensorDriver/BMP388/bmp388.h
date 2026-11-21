@@ -10,20 +10,20 @@
 
 #define BMP388_INT_PIN GPIO_PIN_8
 
-#define BMP388_GROUND_REF_SAMPLES   100     /* ~2 s at the 50 Hz output rate */
+#define BMP388_GROUND_REF_SAMPLES	100 /* ~2 s at the 50 Hz output rate */
 
 typedef struct{
-    BMP388_Raw_t       raw;
-    BMP388_Calib_t     calib;
-    BMP388_GroundRef_t groundRef;
+	BMP388_Raw_t raw;
+	BMP388_Calib_t calib;
+	BMP388_GroundRef_t groundRef;
 
-    float    pressure_pa; // pascal 
-    float    temperature_c; // celsius
-    float    altitude_m; // m
-    uint8_t  addr;
+	float pressure_pa; // pascal 
+	float temperature_c; // celsius
+	float altitude_m; // m
+	uint8_t addr;
 
-    TaskHandle_t      task;
-    volatile uint32_t irqCycles;    /* DWT->CYCCNT at the last INT edge */
+	TaskHandle_t task;
+	volatile uint32_t irqCycles;	/* DWT->CYCCNT at the last INT edge */
 } BMP388_Handle_t;
 
 extern BMP388_Handle_t bmp388;

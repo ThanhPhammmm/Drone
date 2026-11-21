@@ -5,32 +5,32 @@
 #include <stdint.h>
 
 typedef struct{
-    float q0;
-    float q1;
-    float q2;
-    float q3;
+	float q0;
+	float q1;
+	float q2;
+	float q3;
 
-    float q[4];
+	float q[4];
 
-    float roll;
-    float pitch;
-    float yaw;
+	float roll;
+	float pitch;
+	float yaw;
 
-    float rollRate;
-    float pitchRate;
-    float yawRate;
+	float rollRate;
+	float pitchRate;
+	float yawRate;
 
-    float gyroBiasX;
-    float gyroBiasY;
-    float gyroBiasZ;
+	float gyroBiasX;
+	float gyroBiasY;
+	float gyroBiasZ;
 
-    float accelUp;
-    float accelX;
-    float accelY;
+	float accelUp;
+	float accelX;
+	float accelY;
 
-    float dt;
+	float dt;
 
-    uint32_t timestamp_us;
+	uint32_t timestamp_us;
 
 } Attitude_Data_t;
 

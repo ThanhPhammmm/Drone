@@ -1,11 +1,11 @@
 #include "gps_task.h"
 
-#define GPS_POWERUP_MS          1000U   /* the receiver boots */
-#define GPS_POLL_MS             10U     /* well inside the 44 ms the DMA buffer holds */
-#define GPS_PORT_SWITCH_MS      100U    /* after CFG-PRT the receiver moves to the new baud */
-#define GPS_FIRST_PVT_MS        1500U   /* after the setup: this long for the first NAV-PVT */
-#define GPS_LOST_MS             2000U   /* no NAV-PVT this long: find the receiver again */
-#define GPS_RETRY_MS            1000U
+#define GPS_POWERUP_MS		1000U	/* the receiver boots */
+#define GPS_POLL_MS			10U		/* well inside the 44 ms the DMA buffer holds */
+#define GPS_PORT_SWITCH_MS	100U	/* after CFG-PRT the receiver moves to the new baud */
+#define GPS_FIRST_PVT_MS	1500U	/* after the setup: this long for the first NAV-PVT */
+#define GPS_LOST_MS			2000U	/* no NAV-PVT this long: find the receiver again */
+#define GPS_RETRY_MS		1000U
 
 /* Bauds the receiver may be at: ours if it kept running since the last
  * start, 9600 from the factory, the others some boards come set to. */
@@ -20,21 +20,21 @@ uint8_t Gps_Found(void){
 static void Gps_Publish(void){
 	const NEO_M8N_Pvt_t *v = &neoM8n.pvt;
 	Gps_Data_t g;
-	g.fixType      = v->fixType;
-	g.fixOk        = v->fixOk;
-	g.numSV        = v->numSV;
-	g.lat          = v->lat;
-	g.lon          = v->lon;
-	g.altMsl       = (float)v->hMSL * 0.001f;
-	g.hAcc         = (float)v->hAcc * 0.001f;
-	g.vAcc         = (float)v->vAcc * 0.001f;
-	g.velN         = (float)v->velN * 0.001f;
-	g.velE         = (float)v->velE * 0.001f;
-	g.velD         = (float)v->velD * 0.001f;
-	g.sAcc         = (float)v->sAcc * 0.001f;
-	g.pDop         = (float)v->pDOP * 0.01f;
-	g.iTOW         = v->iTOW;
-	g.timestamp_us = Time_Us();
+	g.fixType		= v->fixType;
+	g.fixOk			= v->fixOk;
+	g.numSV			= v->numSV;
+	g.lat			= v->lat;
+	g.lon			= v->lon;
+	g.altMsl		= (float)v->hMSL * 0.001f;
+	g.hAcc			= (float)v->hAcc * 0.001f;
+	g.vAcc			= (float)v->vAcc * 0.001f;
+	g.velN			= (float)v->velN * 0.001f;
+	g.velE			= (float)v->velE * 0.001f;
+	g.velD			= (float)v->velD * 0.001f;
+	g.sAcc			= (float)v->sAcc * 0.001f;
+	g.pDop			= (float)v->pDOP * 0.01f;
+	g.iTOW			= v->iTOW;
+	g.timestamp_us	= Time_Us();
 	GpsTopic_Publish(&g);
 }
 
@@ -73,7 +73,7 @@ void GpsTask(void *argument){
 				continue;
 			}
 			gpsFound = 1;
-			lastPvt  = xTaskGetTickCount();
+			lastPvt = xTaskGetTickCount();
 			Gps_Publish();
 			continue;
 		}
@@ -85,7 +85,7 @@ void GpsTask(void *argument){
 			Gps_Publish();
 		}
 		else if((TickType_t)(xTaskGetTickCount() - lastPvt) > pdMS_TO_TICKS(GPS_LOST_MS)){
-			gpsFound = 0;               /* unplugged, or restarted at its own baud */
+			gpsFound = 0;	/* unplugged, or restarted at its own baud */
 		}
 	}
 }

@@ -1,83 +1,83 @@
 #include "position_estimator_task.h"
 
-#define POS_EST_PERIOD_S            0.01f     /* run the filter on every 10 ms of samples */
-#define POS_EST_GAP_MAX_S           0.05f     /* longer gap between samples: start the window over */
-#define POS_EST_LOSS_CYCLES         50U       /* 0.5 s with no flow velocity: the flow is not in use */
+#define POS_EST_PERIOD_S			0.01f	/* run the filter on every 10 ms of samples */
+#define POS_EST_GAP_MAX_S			0.05f	/* longer gap between samples: start the window over */
+#define POS_EST_LOSS_CYCLES			50U	/* 0.5 s with no flow velocity: the flow is not in use */
 
-#define POS_EST_FLOW_SWAP_XY        0         /* 0: sensor X is the nose axis, 1: sensor Y is */
-#define POS_EST_FLOW_FWD_SIGN       (1.0f)
-#define POS_EST_FLOW_RIGHT_SIGN     (1.0f)
+#define POS_EST_FLOW_SWAP_XY		0	/* 0: sensor X is the nose axis, 1: sensor Y is */
+#define POS_EST_FLOW_FWD_SIGN		(1.0f)
+#define POS_EST_FLOW_RIGHT_SIGN		(1.0f)
 
-#define POS_EST_FLOW_MAX_AGE_US     60000
-#define POS_EST_FLOW_DT_MIN_US      5000
-#define POS_EST_FLOW_DT_MAX_US      150000
+#define POS_EST_FLOW_MAX_AGE_US		60000
+#define POS_EST_FLOW_DT_MIN_US		5000
+#define POS_EST_FLOW_DT_MAX_US		150000
 
-#define POS_EST_HEIGHT_MIN_M        0.12f     /* the PMW3901 lens needs 80 mm to the floor */
-#define POS_EST_HEIGHT_MAX_M        2.5f      /* higher: few counts per sample, and a noisier ToF */
-#define POS_EST_TILT_COS            0.82f     /* more than 35 deg of tilt: the two sensors look too far apart */
+#define POS_EST_HEIGHT_MIN_M		0.12f	/* the PMW3901 lens needs 80 mm to the floor */
+#define POS_EST_HEIGHT_MAX_M		2.5f	/* higher: few counts per sample, and a noisier ToF */
+#define POS_EST_TILT_COS			0.82f	/* more than 35 deg of tilt: the two sensors look too far apart */
 
-#define POS_EST_FLOW_STD_MPS        0.05f     /* 1 sigma the filter gives a flow velocity... */
-#define POS_EST_FLOW_STD_PER_M      0.10f     /* ...plus this per metre of height */
-#define POS_EST_FLOW_GATE           9.0f      /* innovation^2 / S: 3 sigma */
-#define POS_EST_REJECTS_MAX         5U        /* outliers in a row: the filter is off, start over from the flow */
-#define POS_EST_GROUND_V_STD        0.05f     /* standing on the floor: v = 0, which lets the filter learn the accel bias */
+#define POS_EST_FLOW_STD_MPS		0.05f	/* 1 sigma the filter gives a flow velocity... */
+#define POS_EST_FLOW_STD_PER_M		0.10f	/* ...plus this per metre of height */
+#define POS_EST_FLOW_GATE			9.0f	/* innovation^2 / S: 3 sigma */
+#define POS_EST_REJECTS_MAX			5U	/* outliers in a row: the filter is off, start over from the flow */
+#define POS_EST_GROUND_V_STD		0.05f	/* standing on the floor: v = 0, which lets the filter learn the accel bias */
 
-#define POS_EST_GPS_MAX_AGE_US      300000    /* a solution older than this: not used */
-#define POS_EST_GPS_DELAY_STEPS     15U       /* 150 ms: a solution describes the drone this long ago */
-#define POS_EST_GPS_SATS_MIN        6U
-#define POS_EST_GPS_HACC_MAX        3.0f      /* m, worse: not used */
-#define POS_EST_GPS_SACC_MAX        0.6f      /* m/s, worse: not used */
-#define POS_EST_GPS_POS_STD_MIN     1.0f      /* m: never trusted closer than this */
-#define POS_EST_GPS_FLOW_POS_SCALE  2.0f      /* with the flow: GPS position trusted 2x less, it pulls the drift back slowly */
-#define POS_EST_GPS_FLOW_DEADBAND   1.0f      /* with the flow: x hAcc. Closer than this to the GPS: the GPS wander, not drift, left alone */
-#define POS_EST_GPS_VEL_STD_MIN     0.15f     /* m/s */
-#define POS_EST_GPS_POS_GATE        25.0f     /* innovation^2 / S: 5 sigma */
-#define POS_EST_GPS_VEL_GATE        9.0f      /* 3 sigma */
-#define POS_EST_GPS_REJECTS_MAX     5U        /* outliers in a row: start over from the GPS */
-#define POS_EST_GPS_LOSS_CYCLES     100U      /* 1 s with no GPS update: the GPS is not in use */
-#define POS_EST_GPS_TAKEOVER_CYCLES 20U       /* 0.2 s with no flow: the GPS takes over (before the flow's 0.5 s run out) */
-#define POS_EST_GPS_REANCHOR_CYCLES 100U      /* GPS position unused 1 s: tie it to the estimate again on return */
+#define POS_EST_GPS_MAX_AGE_US		300000	/* a solution older than this: not used */
+#define POS_EST_GPS_DELAY_STEPS		15U	/* 150 ms: a solution describes the drone this long ago */
+#define POS_EST_GPS_SATS_MIN		6U
+#define POS_EST_GPS_HACC_MAX		3.0f	/* m, worse: not used */
+#define POS_EST_GPS_SACC_MAX		0.6f	/* m/s, worse: not used */
+#define POS_EST_GPS_POS_STD_MIN		1.0f	/* m: never trusted closer than this */
+#define POS_EST_GPS_FLOW_POS_SCALE	2.0f	/* with the flow: GPS position trusted 2x less, it pulls the drift back slowly */
+#define POS_EST_GPS_FLOW_DEADBAND	1.0f	/* with the flow: x hAcc. Closer than this to the GPS: the GPS wander, not drift, left alone */
+#define POS_EST_GPS_VEL_STD_MIN		0.15f	/* m/s */
+#define POS_EST_GPS_POS_GATE		25.0f	/* innovation^2 / S: 5 sigma */
+#define POS_EST_GPS_VEL_GATE		9.0f	/* 3 sigma */
+#define POS_EST_GPS_REJECTS_MAX		5U	/* outliers in a row: start over from the GPS */
+#define POS_EST_GPS_LOSS_CYCLES		100U	/* 1 s with no GPS update: the GPS is not in use */
+#define POS_EST_GPS_TAKEOVER_CYCLES	20U	/* 0.2 s with no flow: the GPS takes over (before the flow's 0.5 s run out) */
+#define POS_EST_GPS_REANCHOR_CYCLES	100U	/* GPS position unused 1 s: tie it to the estimate again on return */
 
-#define POS_EST_ALIGN_SPEED         0.8f      /* m/s the flow and the GPS must both see */
-#define POS_EST_ALIGN_SAMPLES       10U       /* consistent solutions (2 s at 5 Hz) before the angle is trusted */
-#define POS_EST_ALIGN_SPREAD        0.97f     /* length of the mean direction: samples within ~14 deg */
-#define POS_EST_ALIGN_TRACK_GAIN    0.05f     /* after that: follow the slow gyro heading drift */
+#define POS_EST_ALIGN_SPEED			0.8f	/* m/s the flow and the GPS must both see */
+#define POS_EST_ALIGN_SAMPLES		10U	/* consistent solutions (2 s at 5 Hz) before the angle is trusted */
+#define POS_EST_ALIGN_SPREAD		0.97f	/* length of the mean direction: samples within ~14 deg */
+#define POS_EST_ALIGN_TRACK_GAIN	0.05f	/* after that: follow the slow gyro heading drift */
 
 /* Flow scale calibration (TFT page 6): disarmed, rocked by hand ~1 m over the
  * floor. Standing still, the camera sees only the turn, so counts / gyro turn
  * is the true counts per radian. */
-#define POS_EST_FLOWCAL_ROCK_NEEDED 0.30f     /* rad^2 per axis (sum of turn^2 over flow samples): ~10 s of +-20 deg at ~1 Hz */
-#define POS_EST_FLOWCAL_TIMEOUT_US  60000000U /* not rocked enough by then: fail */
-#define POS_EST_FLOWCAL_FIT_MIN     0.85f     /* counts must follow the rocking this well */
-#define POS_EST_FLOWCAL_K_MIN       150.0f    /* counts per rad outside this: not believable */
-#define POS_EST_FLOWCAL_K_MAX       1500.0f
-#define POS_EST_FLOWCAL_UNEVEN      0.15f     /* the two axes of one chip must agree this well */
+#define POS_EST_FLOWCAL_ROCK_NEEDED	0.30f	/* rad^2 per axis (sum of turn^2 over flow samples): ~10 s of +-20 deg at ~1 Hz */
+#define POS_EST_FLOWCAL_TIMEOUT_US	60000000U /* not rocked enough by then: fail */
+#define POS_EST_FLOWCAL_FIT_MIN		0.85f	/* counts must follow the rocking this well */
+#define POS_EST_FLOWCAL_K_MIN		150.0f	/* counts per rad outside this: not believable */
+#define POS_EST_FLOWCAL_K_MAX		1500.0f
+#define POS_EST_FLOWCAL_UNEVEN		0.15f	/* the two axes of one chip must agree this well */
 
-#define POS_EST_HISTORY             32U       /* filter steps kept for the GPS delay */
-#define POS_EST_EARTH_RADIUS_M      6371000.0f
-#define POS_EST_E7DEG_TO_RAD        (1e-7f * 0.017453293f)
-#define POS_EST_PI                  3.14159265f
+#define POS_EST_HISTORY				32U	/* filter steps kept for the GPS delay */
+#define POS_EST_EARTH_RADIUS_M		6371000.0f
+#define POS_EST_E7DEG_TO_RAD		(1e-7f * 0.017453293f)
+#define POS_EST_PI					3.14159265f
 
 PositionEstimator_Handle_t positionEstimator;
 
 static PosKF_t kfX;
 static PosKF_t kfY;
 
-static PosEst_t  est;
-static PosGps_t  gps;
+static PosEst_t est;
+static PosGps_t gps;
 static PosHist_t hist[POS_EST_HISTORY];
-static uint8_t   histIdx;           /* the next slot to write */
+static uint8_t histIdx;	/* the next slot to write */
 
 /* flow counts -> radians; from calibration.h, or a page 6 result until power-off */
 static float flowRadPerCount = 1.0f / CALIB_PMW3901_COUNTS_PER_RAD;
 
 /* sums for the flow scale calibration */
 static struct{
-	uint8_t  on;
+	uint8_t on;
 	uint32_t startUs;
-	float cfP, ppP, cfcf;   /* nose counts x pitch turn, pitch turn^2, nose counts^2 */
-	float crR, rrR, crcr;   /* right counts x roll turn, roll turn^2, right counts^2 */
-	float cfR, crP;         /* the cross terms */
+	float cfP, ppP, cfcf;	/* nose counts x pitch turn, pitch turn^2, nose counts^2 */
+	float crR, rrR, crcr;	/* right counts x roll turn, roll turn^2, right counts^2 */
+	float cfR, crP;	/* the cross terms */
 } flowCal;
 
 void PositionEstimator_SetTaskHandle(TaskHandle_t handle){
@@ -89,11 +89,11 @@ static void PositionEstimator_Init(void){
 	memset(&gps, 0, sizeof(gps));
 	memset(hist, 0, sizeof(hist));
 	histIdx = 0;
-	est.usedAgo    = POS_EST_LOSS_CYCLES;
-	gps.usedAgo    = POS_EST_GPS_LOSS_CYCLES;
-	gps.posUsedAgo = POS_EST_GPS_REANCHOR_CYCLES;
+	est.usedAgo		= POS_EST_LOSS_CYCLES;
+	gps.usedAgo		= POS_EST_GPS_LOSS_CYCLES;
+	gps.posUsedAgo	= POS_EST_GPS_REANCHOR_CYCLES;
 #if ATT_EST_USE_MAG
-	gps.aligned    = 1;             /* yaw 0 is (magnetic) north already */
+	gps.aligned		= 1;	/* yaw 0 is (magnetic) north already */
 #endif
 	PosKF_Init(&kfX, 0.0f);
 	PosKF_Init(&kfY, 0.0f);
@@ -101,13 +101,13 @@ static void PositionEstimator_Init(void){
 
 /* keeps the result between −180° and +180° */
 static float PositionEstimator_Wrap(float a){
-	while(a >  POS_EST_PI) a -= 2.0f * POS_EST_PI;
+	while(a > POS_EST_PI) a -= 2.0f * POS_EST_PI;
 	while(a < -POS_EST_PI) a += 2.0f * POS_EST_PI;
 	return a;
 }
 
 static int16_t PositionEstimator_S16(float v){
-	if(v >  32767.0f) v =  32767.0f;
+	if(v > 32767.0f) v = 32767.0f;
 	if(v < -32767.0f) v = -32767.0f;
 	return (int16_t)(v + (v >= 0.0f ? 0.5f : -0.5f));
 }
@@ -118,24 +118,24 @@ static float PositionEstimator_Fit(float xy, float xx, float yy){
 
 /* Judge the sums: the counts per radian to use, or why not */
 static void PositionEstimator_FlowCalEnd(void){
-	float kF = flowCal.cfP / flowCal.ppP;
-	float kR = flowCal.crR / flowCal.rrR;
-	float fitF   = PositionEstimator_Fit(flowCal.cfP, flowCal.cfcf, flowCal.ppP);
-	float fitR   = PositionEstimator_Fit(flowCal.crR, flowCal.crcr, flowCal.rrR);
-	float crossF = PositionEstimator_Fit(flowCal.cfR, flowCal.cfcf, flowCal.rrR);   /* nose counts vs roll */
-	float crossR = PositionEstimator_Fit(flowCal.crP, flowCal.crcr, flowCal.ppP);   /* right counts vs pitch */
-	float k = 0.5f * (kF + kR);
+	float kF		= flowCal.cfP / flowCal.ppP;
+	float kR		= flowCal.crR / flowCal.rrR;
+	float fitF		= PositionEstimator_Fit(flowCal.cfP, flowCal.cfcf, flowCal.ppP);
+	float fitR		= PositionEstimator_Fit(flowCal.crR, flowCal.crcr, flowCal.rrR);
+	float crossF	= PositionEstimator_Fit(flowCal.cfR, flowCal.cfcf, flowCal.rrR);	/* nose counts vs roll */
+	float crossR	= PositionEstimator_Fit(flowCal.crP, flowCal.crcr, flowCal.ppP);	/* right counts vs pitch */
+	float k			= 0.5f * (kF + kR);
 
 	uint8_t why;
-	if(fabsf(crossF) > fabsf(fitF) && fabsf(crossR) > fabsf(fitR))          why = TLM_CAL_AXES_SWAPPED;
-	else if(fitF < -POS_EST_FLOWCAL_FIT_MIN || fitR < -POS_EST_FLOWCAL_FIT_MIN) why = TLM_CAL_WRONG_SIGN;
-	else if(fitF < POS_EST_FLOWCAL_FIT_MIN || fitR < POS_EST_FLOWCAL_FIT_MIN)   why = TLM_CAL_BAD_FIT;
+	if(fabsf(crossF) > fabsf(fitF) && fabsf(crossR) > fabsf(fitR))				why = TLM_CAL_AXES_SWAPPED;
+	else if(fitF < -POS_EST_FLOWCAL_FIT_MIN || fitR < -POS_EST_FLOWCAL_FIT_MIN)	why = TLM_CAL_WRONG_SIGN;
+	else if(fitF < POS_EST_FLOWCAL_FIT_MIN || fitR < POS_EST_FLOWCAL_FIT_MIN)	why = TLM_CAL_BAD_FIT;
 	else if(kF < POS_EST_FLOWCAL_K_MIN || kF > POS_EST_FLOWCAL_K_MAX ||
-	        kR < POS_EST_FLOWCAL_K_MIN || kR > POS_EST_FLOWCAL_K_MAX)           why = TLM_CAL_OUT_OF_RANGE;
-	else if(fabsf(kF - kR) > POS_EST_FLOWCAL_UNEVEN * k)                       why = TLM_CAL_UNEVEN;
-	else                                                                       why = TLM_CAL_OK;
+			kR < POS_EST_FLOWCAL_K_MIN || kR > POS_EST_FLOWCAL_K_MAX)			why = TLM_CAL_OUT_OF_RANGE;
+	else if(fabsf(kF - kR) > POS_EST_FLOWCAL_UNEVEN * k)						why = TLM_CAL_UNEVEN;
+	else																		why = TLM_CAL_OK;
 
-	if(why == TLM_CAL_OK) flowRadPerCount = 1.0f / k;       /* in use now, until power-off */
+	if(why == TLM_CAL_OK) flowRadPerCount = 1.0f / k;	/* in use now, until power-off */
 
 	int16_t r[6];
 	r[0] = PositionEstimator_S16(kF);
@@ -183,26 +183,26 @@ static void PositionEstimator_FlowCalCheck(uint32_t nowUs){
 static void PositionEstimator_FlowCalAdd(const Flow_Data_t *flow, float rollTurn, float pitchTurn){
 	Altitude_Data_t alt;
 	uint8_t heightOk = AltitudeTopic_Copy(&alt, 0) == pdPASS && alt.aglValid &&
-	                   alt.agl >= POS_EST_HEIGHT_MIN_M && alt.agl <= POS_EST_HEIGHT_MAX_M;
+						alt.agl >= POS_EST_HEIGHT_MIN_M && alt.agl <= POS_EST_HEIGHT_MAX_M;
 	if(flow->valid && heightOk &&
-	   flow->dt_us >= POS_EST_FLOW_DT_MIN_US && flow->dt_us <= POS_EST_FLOW_DT_MAX_US){
+		flow->dt_us >= POS_EST_FLOW_DT_MIN_US && flow->dt_us <= POS_EST_FLOW_DT_MAX_US){
 #if POS_EST_FLOW_SWAP_XY
-		float cf = POS_EST_FLOW_FWD_SIGN   * (float)flow->deltaY;
+		float cf = POS_EST_FLOW_FWD_SIGN * (float)flow->deltaY;
 		float cr = POS_EST_FLOW_RIGHT_SIGN * (float)flow->deltaX;
 #else
-		float cf = POS_EST_FLOW_FWD_SIGN   * (float)flow->deltaX;
+		float cf = POS_EST_FLOW_FWD_SIGN * (float)flow->deltaX;
 		float cr = POS_EST_FLOW_RIGHT_SIGN * (float)flow->deltaY;
 #endif
 		float p = pitchTurn;
 		float r = -rollTurn;
-		flowCal.cfP  += cf * p;
-		flowCal.ppP  += p * p;
-		flowCal.cfcf += cf * cf;
-		flowCal.crR  += cr * r;
-		flowCal.rrR  += r * r;
-		flowCal.crcr += cr * cr;
-		flowCal.cfR  += cf * r;
-		flowCal.crP  += cr * p;
+		flowCal.cfP		+= cf * p;
+		flowCal.ppP		+= p * p;
+		flowCal.cfcf	+= cf * cf;
+		flowCal.crR		+= cr * r;
+		flowCal.rrR		+= r * r;
+		flowCal.crcr	+= cr * cr;
+		flowCal.cfR		+= cf * r;
+		flowCal.crP		+= cr * p;
 	}
 
 	int16_t res[6];
@@ -216,7 +216,7 @@ static void PositionEstimator_FlowCalAdd(const Flow_Data_t *flow, float rollTurn
 }
 
 static uint8_t PositionEstimator_FlowVelocity(const Attitude_Data_t *att, const Flow_Data_t *flow,
-                                             float rollTurn, float pitchTurn, float *vx, float *vy, float *std){
+											 float rollTurn, float pitchTurn, float *vx, float *vy, float *std){
 	if(!flow->valid) return 0;
 	if(flow->dt_us < POS_EST_FLOW_DT_MIN_US || flow->dt_us > POS_EST_FLOW_DT_MAX_US) return 0;
 	int32_t age = Time_DiffUs(att->timestamp_us, flow->timestamp_us);
@@ -234,22 +234,22 @@ static uint8_t PositionEstimator_FlowVelocity(const Attitude_Data_t *att, const 
 	float d = alt.agl / tiltCos;
 
 #if POS_EST_FLOW_SWAP_XY
-	float countsFwd   = (float)flow->deltaY;
-	float countsRight = (float)flow->deltaX;
+	float countsFwd		= (float)flow->deltaY;
+	float countsRight	= (float)flow->deltaX;
 #else
-	float countsFwd   = (float)flow->deltaX;
-	float countsRight = (float)flow->deltaY;
+	float countsFwd		= (float)flow->deltaX;
+	float countsRight	= (float)flow->deltaY;
 #endif
 
 	/* remove the pitch and roll the camera saw */											
-	float angleFwd   = POS_EST_FLOW_FWD_SIGN   * countsFwd   * flowRadPerCount - pitchTurn;
-	float angleRight = POS_EST_FLOW_RIGHT_SIGN * countsRight * flowRadPerCount + rollTurn;
+	float angleFwd		= POS_EST_FLOW_FWD_SIGN * countsFwd * flowRadPerCount - pitchTurn;
+	float angleRight	= POS_EST_FLOW_RIGHT_SIGN * countsRight * flowRadPerCount + rollTurn;
 
-	float dt     = (float)flow->dt_us * 1e-6f;
+	float dt = (float)flow->dt_us * 1e-6f;
 	/* s = angle × height 
 	 * v = s / time */
-	float vFwd   = angleFwd   * d / dt;
-	float vRight = angleRight * d / dt;
+	float vFwd		= angleFwd * d / dt;
+	float vRight	= angleRight * d / dt;
 
 	/* heading frame -> level frame */
 	/* x part = cos ψ 
@@ -263,9 +263,9 @@ static uint8_t PositionEstimator_FlowVelocity(const Attitude_Data_t *att, const 
 	float s = sinf(att->yaw);
 	/* Rotate the flow velocity from the drone’s own directions (forward/right) 
 	 * into the fixed map directions (x/y) */
-	*vx  = c * vFwd - s * vRight;
-	*vy  = s * vFwd + c * vRight;
-	*std = POS_EST_FLOW_STD_MPS + POS_EST_FLOW_STD_PER_M * d;
+	*vx 	= c * vFwd - s * vRight;
+	*vy 	= s * vFwd + c * vRight;
+	*std	= POS_EST_FLOW_STD_MPS + POS_EST_FLOW_STD_PER_M * d;
 	return 1;
 }
 
@@ -280,7 +280,7 @@ static void PositionEstimator_Align(const Gps_Data_t *g, const PosHist_t *then, 
 	float diff = PositionEstimator_Wrap(atan2f(g->velE, g->velN) - atan2f(then->vy, then->vx));
 	if(gps.aligned){
 		gps.yawOffset = PositionEstimator_Wrap(gps.yawOffset +
-		                POS_EST_ALIGN_TRACK_GAIN * PositionEstimator_Wrap(diff - gps.yawOffset));
+						POS_EST_ALIGN_TRACK_GAIN * PositionEstimator_Wrap(diff - gps.yawOffset));
 		return;
 	}
 
@@ -293,20 +293,20 @@ static void PositionEstimator_Align(const Gps_Data_t *g, const PosHist_t *then, 
 
 	float spread = sqrtf(gps.alignC * gps.alignC + gps.alignS * gps.alignS) / gps.alignW;
 	if(spread >= POS_EST_ALIGN_SPREAD){
-		gps.yawOffset = atan2f(gps.alignS, gps.alignC);
-		gps.aligned   = 1;
+		gps.yawOffset	= atan2f(gps.alignS, gps.alignC);
+		gps.aligned		= 1;
 	}
 	else{
 		/* the samples disagree (sharp turns, gusts): keep half, look again */
-		gps.alignC *= 0.5f;
-		gps.alignS *= 0.5f;
-		gps.alignW *= 0.5f;
-		gps.alignN  = POS_EST_ALIGN_SAMPLES / 2U;
+		gps.alignC	*= 0.5f;
+		gps.alignS	*= 0.5f;
+		gps.alignW	*= 0.5f;
+		gps.alignN	= POS_EST_ALIGN_SAMPLES / 2U;
 	}
 }
 
 static void PositionEstimator_Gps(uint32_t nowUs, uint8_t standing, uint8_t flowFresh){
-	if(gps.usedAgo    < POS_EST_GPS_LOSS_CYCLES)     gps.usedAgo++;
+	if(gps.usedAgo < POS_EST_GPS_LOSS_CYCLES) gps.usedAgo++;
 	if(gps.posUsedAgo < POS_EST_GPS_REANCHOR_CYCLES) gps.posUsedAgo++;
 
 	Gps_Data_t g;
@@ -317,17 +317,17 @@ static void PositionEstimator_Gps(uint32_t nowUs, uint8_t standing, uint8_t flow
 	if(age > POS_EST_GPS_MAX_AGE_US || age < -POS_EST_GPS_MAX_AGE_US) return;
 	if(!g.fixOk || g.fixType < 3 || g.numSV < POS_EST_GPS_SATS_MIN) return;
 	if(g.hAcc > POS_EST_GPS_HACC_MAX || g.sAcc > POS_EST_GPS_SACC_MAX) return;
-	if(est.steps < POS_EST_HISTORY) return;            /* the delay needs a full history */
+	if(est.steps < POS_EST_HISTORY) return;	/* the delay needs a full history */
 
 	/* first fix*/
 	if(!gps.originSet){
-		gps.lat0      = g.lat;
-		gps.lon0      = g.lon;
-		gps.cosLat0   = cosf((float)g.lat * POS_EST_E7DEG_TO_RAD);
-		gps.originSet = 1;
+		gps.lat0		= g.lat;
+		gps.lon0		= g.lon;
+		gps.cosLat0		= cosf((float)g.lat * POS_EST_E7DEG_TO_RAD);
+		gps.originSet	= 1;
 	}
 	float north = (float)(g.lat - gps.lat0) * POS_EST_E7DEG_TO_RAD * POS_EST_EARTH_RADIUS_M;
-	float east  = (float)(g.lon - gps.lon0) * POS_EST_E7DEG_TO_RAD * POS_EST_EARTH_RADIUS_M * gps.cosLat0;
+	float east	= (float)(g.lon - gps.lon0) * POS_EST_E7DEG_TO_RAD * POS_EST_EARTH_RADIUS_M * gps.cosLat0;
 
 	/* the estimate as it was when the receiver measured */
 	const PosHist_t *then = &hist[(histIdx + POS_EST_HISTORY - POS_EST_GPS_DELAY_STEPS) % POS_EST_HISTORY];
@@ -339,12 +339,12 @@ static void PositionEstimator_Gps(uint32_t nowUs, uint8_t standing, uint8_t flow
 	/* 	[gx,gvx]   [ cos ψ   sin ψ ] [north,velN]
 		[gy,gvy] = [−sin ψ   cos ψ ] [east,velE]
 	*/
-	float c   = cosf(gps.yawOffset);
-	float s   = sinf(gps.yawOffset);
-	float gx  =  c * north  + s * east;
-	float gy  = -s * north  + c * east;
-	float gvx =  c * g.velN + s * g.velE;
-	float gvy = -s * g.velN + c * g.velE;
+	float c		= cosf(gps.yawOffset);
+	float s		= sinf(gps.yawOffset);
+	float gx	= c * north + s * east;
+	float gy	= -s * north + c * east;
+	float gvx	= c * g.velN + s * g.velE;
+	float gvy	= -s * g.velN + c * g.velE;
 
 	uint8_t posUse = !standing;
 	uint8_t velUse = !standing && !flowFresh;
@@ -364,19 +364,19 @@ static void PositionEstimator_Gps(uint32_t nowUs, uint8_t standing, uint8_t flow
 		float vy = PosKF_Get(&kfY, POS_KF_V);
 		float velStd = (g.sAcc > POS_EST_GPS_VEL_STD_MIN) ? g.sAcc : POS_EST_GPS_VEL_STD_MIN;
 		/* calculate the current gps velocity */
-		float velX   = gvx + (vx - then->vx);
-		float velY   = gvy + (vy - then->vy);
+		float velX = gvx + (vx - then->vx);
+		float velY = gvy + (vy - then->vy);
 		uint8_t velUsedX = PosKF_UpdateVelocity(&kfX, velX, velStd, POS_EST_GPS_VEL_GATE);
 		uint8_t velUsedY = PosKF_UpdateVelocity(&kfY, velY, velStd, POS_EST_GPS_VEL_GATE);
 		if(velUsedX && velUsedY){
-			gps.velRejects = 0;
-			gps.usedAgo    = 0;
+			gps.velRejects	= 0;
+			gps.usedAgo		= 0;
 		}
 		else if(++gps.velRejects >= POS_EST_GPS_REJECTS_MAX){
 			PosKF_SetVelocity(&kfX, velX, velStd);
 			PosKF_SetVelocity(&kfY, velY, velStd);
-			gps.velRejects = 0;
-			gps.usedAgo    = 0;
+			gps.velRejects	= 0;
+			gps.usedAgo		= 0;
 		}
 	}
 
@@ -388,14 +388,14 @@ static void PositionEstimator_Gps(uint32_t nowUs, uint8_t standing, uint8_t flow
 	float zy = gps.y + (py - then->y);
 	if(flowFresh){
 		/* drift compensation */
-		float ix   = gps.x - then->x;
-		float iy   = gps.y - then->y;
-		float gap  = sqrtf(ix * ix + iy * iy);
-		float band = POS_EST_GPS_FLOW_DEADBAND * posStd;
+		float ix	= gps.x - then->x;
+		float iy	= gps.y - then->y;
+		float gap	= sqrtf(ix * ix + iy * iy);
+		float band	= POS_EST_GPS_FLOW_DEADBAND * posStd;
 		if(gap <= band){
-			gps.posRejects = 0;
-			gps.posUsedAgo = 0;     /* in use: no new anchor */
-			gps.usedAgo    = 0;
+			gps.posRejects	= 0;
+			gps.posUsedAgo	= 0;	/* in use: no new anchor */
+			gps.usedAgo		= 0;
 			return;
 		}
 		float keep = (gap - band) / gap;
@@ -406,9 +406,9 @@ static void PositionEstimator_Gps(uint32_t nowUs, uint8_t standing, uint8_t flow
 	uint8_t posUsedX = PosKF_UpdatePosition(&kfX, zx, posStd, POS_EST_GPS_POS_GATE);
 	uint8_t posUsedY = PosKF_UpdatePosition(&kfY, zy, posStd, POS_EST_GPS_POS_GATE);
 	if(posUsedX && posUsedY){
-		gps.posRejects = 0;
-		gps.posUsedAgo = 0;
-		gps.usedAgo    = 0;
+		gps.posRejects	= 0;
+		gps.posUsedAgo	= 0;
+		gps.usedAgo		= 0;
 	}
 	else if(++gps.posRejects >= POS_EST_GPS_REJECTS_MAX){
 		/* the fix jumped: tie it to the estimate again with the next one */
@@ -420,15 +420,15 @@ static void PositionEstimator_Gps(uint32_t nowUs, uint8_t standing, uint8_t flow
 /* one attitude sample (1 kHz) */
 static void PositionEstimator_Step(const Attitude_Data_t *att){
 	if(!est.haveSample){
-		est.lastSampleUs = att->timestamp_us;
-		est.haveSample   = 1;
+		est.lastSampleUs	= att->timestamp_us;
+		est.haveSample		= 1;
 		return;
 	}
 
 	if(CalSvc_Take(RC_CAL_FLOW)){
 		memset(&flowCal, 0, sizeof(flowCal));
-		flowCal.on      = 1;
-		flowCal.startUs = att->timestamp_us;
+		flowCal.on		= 1;
+		flowCal.startUs	= att->timestamp_us;
 	}
 	if(flowCal.on) PositionEstimator_FlowCalCheck(att->timestamp_us);
 
@@ -437,40 +437,40 @@ static void PositionEstimator_Step(const Attitude_Data_t *att){
 	est.lastSampleUs = att->timestamp_us;
 
 	if(sampleDt > POS_EST_GAP_MAX_S){
-		est.dtAcc     = 0.0f;
-		est.accelXAcc = 0.0f;
-		est.accelYAcc = 0.0f;
-		est.rollTurn  = 0.0f;
-		est.pitchTurn = 0.0f;
+		est.dtAcc		= 0.0f;
+		est.accelXAcc	= 0.0f;
+		est.accelYAcc	= 0.0f;
+		est.rollTurn	= 0.0f;
+		est.pitchTurn	= 0.0f;
 		return;
 	}
 
 	/* Use for tilt flow correction */
-	est.rollTurn  += att->rollRate  * sampleDt;
-	est.pitchTurn += att->pitchRate * sampleDt;
+	est.rollTurn	+= att->rollRate * sampleDt;
+	est.pitchTurn	+= att->pitchRate * sampleDt;
 
 	Flow_Data_t flow;
 	if(FlowTopic_Copy(&flow, 0) == pdPASS && flow.timestamp_us != 0 && flow.timestamp_us != est.lastFlowUs){
-		est.lastFlowUs  = flow.timestamp_us;
+		est.lastFlowUs = flow.timestamp_us;
 		if(flowCal.on) PositionEstimator_FlowCalAdd(&flow, est.rollTurn, est.pitchTurn);
 		est.flowPending = PositionEstimator_FlowVelocity(att, &flow, est.rollTurn, est.pitchTurn,
-		                                                 &est.flowVx, &est.flowVy, &est.flowStd);
-		est.rollTurn  = 0.0f;
-		est.pitchTurn = 0.0f;
+														 &est.flowVx, &est.flowVy, &est.flowStd);
+		est.rollTurn	= 0.0f;
+		est.pitchTurn	= 0.0f;
 	}
 
-	est.dtAcc     += sampleDt;
-	est.accelXAcc += att->accelX * sampleDt;
-	est.accelYAcc += att->accelY * sampleDt;
+	est.dtAcc		+= sampleDt;
+	est.accelXAcc	+= att->accelX * sampleDt;
+	est.accelYAcc	+= att->accelY * sampleDt;
 	if(est.dtAcc < POS_EST_PERIOD_S) return;
 	
 	/* Average the 1 kHz acceleration over 10 ms */
-	float dt = est.dtAcc;
-	float ax = est.accelXAcc / est.dtAcc;
-	float ay = est.accelYAcc / est.dtAcc;
-	est.dtAcc     = 0.0f;
-	est.accelXAcc = 0.0f;
-	est.accelYAcc = 0.0f;
+	float dt 		= est.dtAcc;
+	float ax 		= est.accelXAcc / est.dtAcc;
+	float ay 		= est.accelYAcc / est.dtAcc;
+	est.dtAcc		= 0.0f;
+	est.accelXAcc	= 0.0f;
+	est.accelYAcc	= 0.0f;
 
 	PosKF_Predict(&kfX, ax, dt);
 	PosKF_Predict(&kfY, ay, dt);
@@ -481,14 +481,14 @@ static void PositionEstimator_Step(const Attitude_Data_t *att){
 	 * it does not move */
 	uint8_t airborne = Arm_IsAirborne();
 	(void)AltitudeTopic_Copy(&est.alt, 0);
-	uint8_t onFloor  = Arm_MotorsAllowed() && est.alt.onFloor;
+	uint8_t onFloor = Arm_MotorsAllowed() && est.alt.onFloor;
 	uint8_t standing = !airborne && (onFloor || !est.alt.aglValid || est.alt.agl < POS_EST_HEIGHT_MIN_M);
 	if(standing){
 		/* learn the accel bias */
 		PosKF_UpdateVelocity(&kfX, 0.0f, POS_EST_GROUND_V_STD, 0.0f);
 		PosKF_UpdateVelocity(&kfY, 0.0f, POS_EST_GROUND_V_STD, 0.0f);
-		est.flowPending = 0;
-		est.rejects     = 0;
+		est.flowPending	= 0;
+		est.rejects		= 0;
 	}
 	else if(est.flowPending){
 		est.flowPending = 0;
@@ -510,36 +510,36 @@ static void PositionEstimator_Step(const Attitude_Data_t *att){
 	uint8_t flowFresh = (est.usedAgo < POS_EST_GPS_TAKEOVER_CYCLES);
 	uint8_t flowInUse = (est.usedAgo < POS_EST_LOSS_CYCLES);
 	PositionEstimator_Gps(att->timestamp_us, standing, flowFresh);
-	uint8_t gpsInUse  = (gps.usedAgo < POS_EST_GPS_LOSS_CYCLES);
+	uint8_t gpsInUse = (gps.usedAgo < POS_EST_GPS_LOSS_CYCLES);
 
-	float vx = PosKF_Get(&kfX, POS_KF_V);
-	float vy = PosKF_Get(&kfY, POS_KF_V);
-	float c  = cosf(att->yaw);
-	float s  = sinf(att->yaw);
+	float vx	= PosKF_Get(&kfX, POS_KF_V);
+	float vy	= PosKF_Get(&kfY, POS_KF_V);
+	float c 	= cosf(att->yaw);
+	float s 	= sinf(att->yaw);
 
 	Position_Data_t *pos = &positionEstimator.data;
-	pos->x            = PosKF_Get(&kfX, POS_KF_P);
-	pos->y            = PosKF_Get(&kfY, POS_KF_P);
-	pos->vx           = vx;
-	pos->vy           = vy;
+	pos->x				= PosKF_Get(&kfX, POS_KF_P);
+	pos->y				= PosKF_Get(&kfY, POS_KF_P);
+	pos->vx				= vx;
+	pos->vy				= vy;
 	/* the transpose of R(ψ) = rotate by −ψ 
 	 * turns back from the map to the nose */
-	pos->vFwd         =  c * vx + s * vy;
-	pos->vRight       = -s * vx + c * vy;
-	pos->yaw          = att->yaw;
-	pos->valid        = airborne && (flowInUse || gpsInUse);
-	pos->source       = (gpsInUse && !flowFresh) ? POS_SOURCE_GPS : (flowInUse ? POS_SOURCE_FLOW : POS_SOURCE_NONE);
-	pos->gpsAligned   = gps.aligned;
-	pos->gpsYawOffset = gps.yawOffset;
-	pos->gpsX         = gps.aligned ? gps.x : 0.0f;
-	pos->gpsY         = gps.aligned ? gps.y : 0.0f;
-	pos->timestamp_us = att->timestamp_us;
+	pos->vFwd			= c * vx + s * vy;
+	pos->vRight			= -s * vx + c * vy;
+	pos->yaw			= att->yaw;
+	pos->valid			= airborne && (flowInUse || gpsInUse);
+	pos->source			= (gpsInUse && !flowFresh) ? POS_SOURCE_GPS : (flowInUse ? POS_SOURCE_FLOW : POS_SOURCE_NONE);
+	pos->gpsAligned		= gps.aligned;
+	pos->gpsYawOffset	= gps.yawOffset;
+	pos->gpsX			= gps.aligned ? gps.x : 0.0f;
+	pos->gpsY			= gps.aligned ? gps.y : 0.0f;
+	pos->timestamp_us	= att->timestamp_us;
 
 	/* this step's estimate, for the GPS delay */
-	hist[histIdx].x  = pos->x;
-	hist[histIdx].y  = pos->y;
-	hist[histIdx].vx = vx;
-	hist[histIdx].vy = vy;
+	hist[histIdx].x		= pos->x;
+	hist[histIdx].y		= pos->y;
+	hist[histIdx].vx	= vx;
+	hist[histIdx].vy	= vy;
 	histIdx = (uint8_t)((histIdx + 1U) % POS_EST_HISTORY);
 	if(est.steps < POS_EST_HISTORY) est.steps++;
 

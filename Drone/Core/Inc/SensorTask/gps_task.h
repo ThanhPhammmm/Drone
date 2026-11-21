@@ -7,7 +7,7 @@
 #include "task.h"
 #include "timebase.h"
 
-void    GpsTask(void *argument);
-uint8_t Gps_Found(void);        /* the receiver answers with NAV-PVT */
+void GpsTask(void *argument);
+uint8_t Gps_Found(void);	/* the receiver answers with NAV-PVT */
 
 #endif /* INC_SENSORTASK_GPS_TASK_H_ */

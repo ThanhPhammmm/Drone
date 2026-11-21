@@ -3,40 +3,40 @@
 #include "arm.h"
 #include "debug.h"
 
-#define MOTOR_TIM      htim1
-#define MOTOR_PWM_MIN  1000.0f   /* µs = throttle 0 / disarmed */
-#define MOTOR_PWM_MAX  2000.0f   /* µs = throttle 1 */
-#define MOTOR_IDLE     0.05f     /* spin-min while motors are allowed to move (0..1) */
-#define MOTOR_MAX      1.0f
+#define MOTOR_TIM		htim1
+#define MOTOR_PWM_MIN	1000.0f		/* µs = throttle 0 / disarmed */
+#define MOTOR_PWM_MAX	2000.0f		/* µs = throttle 1 */
+#define MOTOR_IDLE		0.05f		/* spin-min while motors are allowed to move (0..1) */
+#define MOTOR_MAX		1.0f
 
-#define MOTOR_DESAT_MIN_THROTTLE  0.05f
+#define MOTOR_DESAT_MIN_THROTTLE	0.05f
 
 static const uint32_t motorChannel[MOTOR_COUNT] = {
 	TIM_CHANNEL_1, TIM_CHANNEL_2, TIM_CHANNEL_3,TIM_CHANNEL_4
 };
 
 static const float mix[MOTOR_COUNT][4] = {
-    /* M1 front-right CCW*/ { -1.0f, +1.0f, +1.0f, 1.0f },
-    /* M2 rear-right  CW*/ { -1.0f, -1.0f, -1.0f, 1.0f },
-    /* M3 rear-left   CCW*/ { +1.0f, -1.0f, +1.0f, 1.0f },
-    /* M4 front-left  CW*/ { +1.0f, +1.0f, -1.0f, 1.0f },
+	/* M1 front-right CCW*/ { -1.0f, +1.0f, +1.0f, 1.0f },
+	/* M2 rear-right  CW*/ { -1.0f, -1.0f, -1.0f, 1.0f },
+	/* M3 rear-left   CCW*/ { +1.0f, -1.0f, +1.0f, 1.0f },
+	/* M4 front-left  CW*/ { +1.0f, +1.0f, -1.0f, 1.0f },
 };
 
 static inline float clampf(float v, float lo, float hi){
-    return v < lo ? lo : (v > hi ? hi : v);
+	return v < lo ? lo : (v > hi ? hi : v);
 }
 
-static void motor_write(uint8_t i, float value01){   /* value01 in [0,1] */
-    value01 = clampf(value01, 0.0f, 1.0f);
-    uint32_t ccr = (uint32_t)(MOTOR_PWM_MIN + value01 * (MOTOR_PWM_MAX - MOTOR_PWM_MIN) + 0.5f);
-     __HAL_TIM_SET_COMPARE(&MOTOR_TIM, motorChannel[i], ccr);
+static void motor_write(uint8_t i, float value01){	/* value01 in [0,1] */
+	value01 = clampf(value01, 0.0f, 1.0f);
+	uint32_t ccr = (uint32_t)(MOTOR_PWM_MIN + value01 * (MOTOR_PWM_MAX - MOTOR_PWM_MIN) + 0.5f);
+	 __HAL_TIM_SET_COMPARE(&MOTOR_TIM, motorChannel[i], ccr);
 }
 
 void MotorOutput_Init(void){
-    for(uint8_t i = 0; i < MOTOR_COUNT; i++){
-        HAL_TIM_PWM_Start(&MOTOR_TIM, motorChannel[i]);
-        motor_write(i, 0.0f);      /* 1000 µs -> ESCs arm at power-up */
-    }
+	for(uint8_t i = 0; i < MOTOR_COUNT; i++){
+		HAL_TIM_PWM_Start(&MOTOR_TIM, motorChannel[i]);
+		motor_write(i, 0.0f);		/* 1000 µs -> ESCs arm at power-up */
+	}
 }
 
 void MotorOutput_Update(float roll, float pitch, float yaw, float throttle, MotorSaturation_t *sat){
@@ -50,119 +50,119 @@ void MotorOutput_Update(float roll, float pitch, float yaw, float throttle, Moto
 	if(!Arm_MotorsAllowed()){
 		/* ARMED_GROUND spins the props at idle, everything else keeps them stopped */
 		float idle = Arm_GroundIdle() ? MOTOR_IDLE : 0.0f;
-        for(uint8_t i = 0; i < MOTOR_COUNT; i++) motor_write(i, idle);
-        return;
-    }
+		for(uint8_t i = 0; i < MOTOR_COUNT; i++) motor_write(i, idle);
+		return;
+	}
 
-    const float available = MOTOR_MAX - MOTOR_IDLE;
+	const float available = MOTOR_MAX - MOTOR_IDLE;
 
-    const uint8_t airMode = Arm_IsAirborne() && throttle > MOTOR_DESAT_MIN_THROTTLE;
+	const uint8_t airMode = Arm_IsAirborne() && throttle > MOTOR_DESAT_MIN_THROTTLE;
 
-    float thr = clampf(throttle, MOTOR_IDLE, MOTOR_MAX);
+	float thr = clampf(throttle, MOTOR_IDLE, MOTOR_MAX);
 
-    /* Roll/pitch first: they keep the aircraft upright. */
-    float rp[MOTOR_COUNT];
-    float lo = 0.0f, hi = 0.0f;
+	/* Roll/pitch first: they keep the aircraft upright. */
+	float rp[MOTOR_COUNT];
+	float lo = 0.0f, hi = 0.0f;
 
-    for(uint8_t i = 0; i < MOTOR_COUNT; i++){
-        rp[i] = roll  * mix[i][0]
-              + pitch * mix[i][1];
+	for(uint8_t i = 0; i < MOTOR_COUNT; i++){
+		rp[i] = roll * mix[i][0]
+			 + pitch * mix[i][1];
 
-        if(i == 0 || rp[i] < lo) lo = rp[i];
-        if(i == 0 || rp[i] > hi) hi = rp[i];
-    }
+		if(i == 0 || rp[i] < lo) lo = rp[i];
+		if(i == 0 || rp[i] > hi) hi = rp[i];
+	}
 
-    float scale = 1.0f;
-    if((hi - lo) > available){
-        scale = available / (hi - lo);
-    }
+	float scale = 1.0f;
+	if((hi - lo) > available){
+		scale = available / (hi - lo);
+	}
 
-    if(!airMode){
-        float h = hi * scale;
-        float l = lo * scale;
-        if(thr + h > MOTOR_MAX) thr = MOTOR_MAX - h;
-        if(thr + l < MOTOR_IDLE && l < 0.0f){
-            scale *= (thr - MOTOR_IDLE) / -l;
-        }
-    }
+	if(!airMode){
+		float h = hi * scale;
+		float l = lo * scale;
+		if(thr + h > MOTOR_MAX) thr = MOTOR_MAX - h;
+		if(thr + l < MOTOR_IDLE && l < 0.0f){
+			scale *= (thr - MOTOR_IDLE) / -l;
+		}
+	}
 
-    lo *= scale;
-    hi *= scale;
-    for(uint8_t i = 0; i < MOTOR_COUNT; i++) rp[i] *= scale;
-    if(sat && scale < 1.0f) sat->rollPitchSaturated = 1;
+	lo *= scale;
+	hi *= scale;
+	for(uint8_t i = 0; i < MOTOR_COUNT; i++) rp[i] *= scale;
+	if(sat && scale < 1.0f) sat->rollPitchSaturated = 1;
 
-    /* Yaw only gets the room roll/pitch left, so a large yaw demand can never
-     * scale roll/pitch down or push a diagonal pair onto the idle floor. */
-    float yawHi, yawLo;
-    if(airMode){
-        yawHi = 0.5f * (available - (hi - lo));
-        yawLo = -yawHi;
-    }
-    else{
-        yawHi =  available;
-        yawLo = -available;
-        for(uint8_t i = 0; i < MOTOR_COUNT; i++){
-            float k = mix[i][2];
-            if(k == 0.0f) continue;
-            float up   = MOTOR_MAX - (thr + rp[i]);
-            float down = (thr + rp[i]) - MOTOR_IDLE;
-            if(up   < 0.0f) up   = 0.0f;
-            if(down < 0.0f) down = 0.0f;
-            float a = (k > 0.0f) ? k : -k;
-            float roomPos = ((k > 0.0f) ? up : down) / a;
-            float roomNeg = ((k > 0.0f) ? down : up) / a;
-            if(roomPos < yawHi)  yawHi =  roomPos;
-            if(-roomNeg > yawLo) yawLo = -roomNeg;
-        }
-    }
-    if(yaw > yawHi || yaw < yawLo){
-        yaw = clampf(yaw, yawLo, yawHi);
-        if(sat) sat->yawSaturated = 1;
-    }
+	/* Yaw only gets the room roll/pitch left, so a large yaw demand can never
+	 * scale roll/pitch down or push a diagonal pair onto the idle floor. */
+	float yawHi, yawLo;
+	if(airMode){
+		yawHi = 0.5f * (available - (hi - lo));
+		yawLo = -yawHi;
+	}
+	else{
+		yawHi = available;
+		yawLo = -available;
+		for(uint8_t i = 0; i < MOTOR_COUNT; i++){
+			float k = mix[i][2];
+			if(k == 0.0f) continue;
+			float up = MOTOR_MAX - (thr + rp[i]);
+			float down = (thr + rp[i]) - MOTOR_IDLE;
+			if(up < 0.0f) up = 0.0f;
+			if(down < 0.0f) down = 0.0f;
+			float a = (k > 0.0f) ? k : -k;
+			float roomPos = ((k > 0.0f) ? up : down) / a;
+			float roomNeg = ((k > 0.0f) ? down : up) / a;
+			if(roomPos < yawHi) yawHi = roomPos;
+			if(-roomNeg > yawLo) yawLo = -roomNeg;
+		}
+	}
+	if(yaw > yawHi || yaw < yawLo){
+		yaw = clampf(yaw, yawLo, yawHi);
+		if(sat) sat->yawSaturated = 1;
+	}
 
-    float axis[MOTOR_COUNT];
-    for(uint8_t i = 0; i < MOTOR_COUNT; i++){
-        axis[i] = rp[i] + yaw * mix[i][2];
+	float axis[MOTOR_COUNT];
+	for(uint8_t i = 0; i < MOTOR_COUNT; i++){
+		axis[i] = rp[i] + yaw * mix[i][2];
 
-        if(i == 0 || axis[i] < lo) lo = axis[i];
-        if(i == 0 || axis[i] > hi) hi = axis[i];
-    }
+		if(i == 0 || axis[i] < lo) lo = axis[i];
+		if(i == 0 || axis[i] > hi) hi = axis[i];
+	}
 
-    if(airMode){
-        thr = clampf(throttle, MOTOR_IDLE - lo, MOTOR_MAX - hi);
-    }
+	if(airMode){
+		thr = clampf(throttle, MOTOR_IDLE - lo, MOTOR_MAX - hi);
+	}
 
-    if(sat){
-        if(throttle > thr + 1e-4f) sat->throttleSaturatedHigh = 1;
-        if(throttle < thr - 1e-4f) sat->throttleSaturatedLow  = 1;
-    }
+	if(sat){
+		if(throttle > thr + 1e-4f) sat->throttleSaturatedHigh = 1;
+		if(throttle < thr - 1e-4f) sat->throttleSaturatedLow = 1;
+	}
 
-    for(uint8_t i = 0; i < MOTOR_COUNT; i++){
-        float out = clampf(thr + axis[i], MOTOR_IDLE, MOTOR_MAX);
-        motor_write(i, out);
-    }
+	for(uint8_t i = 0; i < MOTOR_COUNT; i++){
+		float out = clampf(thr + axis[i], MOTOR_IDLE, MOTOR_MAX);
+		motor_write(i, out);
+	}
 }
 
 void ESC_Calibrate(void){
-    //HAL_Delay(3000);
+	//HAL_Delay(3000);
 
-    for(uint8_t i = 0; i < MOTOR_COUNT; i++)
-    {
-        motor_write(i, 1.0f);   // 2000us
-    }
+	for(uint8_t i = 0; i < MOTOR_COUNT; i++)
+	{
+		motor_write(i, 1.0f);	// 2000us
+	}
 
-    //HAL_Delay(3000);
+	//HAL_Delay(3000);
 
-    for(uint8_t i = 0; i < MOTOR_COUNT; i++)
-    {
-        motor_write(i, 0.0f);   // 1000us
-    }
+	for(uint8_t i = 0; i < MOTOR_COUNT; i++)
+	{
+		motor_write(i, 0.0f);	// 1000us
+	}
 
-    //HAL_Delay(3000);
+	//HAL_Delay(3000);
 }
 
 void MotorOutput_GetPulsesUs(float us[MOTOR_COUNT]){
-    for(uint8_t i = 0; i < MOTOR_COUNT; i++){
-        us[i] = (float)__HAL_TIM_GET_COMPARE(&MOTOR_TIM, motorChannel[i]);   /* 1 tick = 1 us */
-    }
+	for(uint8_t i = 0; i < MOTOR_COUNT; i++){
+		us[i] = (float)__HAL_TIM_GET_COMPARE(&MOTOR_TIM, motorChannel[i]);	/* 1 tick = 1 us */
+	}
 }

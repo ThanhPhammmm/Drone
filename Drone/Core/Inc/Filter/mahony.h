@@ -4,19 +4,19 @@
 #include "bmi088_data_types.h"
 
 typedef struct{
-    float kp;
-    float ki;
+	float kp;
+	float ki;
 
-    /* quaternion */
-    float q[4];
+	/* quaternion */
+	float q[4];
 
-    /* estimated gyro bias */
-    float bias[3];
+	/* estimated gyro bias */
+	float bias[3];
 
-    /* bias-corrected body rates (rad/s) */
-    float rate[3];
+	/* bias-corrected body rates (rad/s) */
+	float rate[3];
 
-    uint8_t headingAligned;     /* yaw snapped to the magnetometer once */
+	uint8_t headingAligned;	/* yaw snapped to the magnetometer once */
 
 } Mahony_t;
 

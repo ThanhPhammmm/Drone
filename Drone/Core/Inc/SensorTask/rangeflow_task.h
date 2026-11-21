@@ -10,8 +10,14 @@
 #include "timebase.h"
 #include "i2c.h"
 
+#define RANGEFLOW_SCL_PORT			GPIOB
+#define RANGEFLOW_SCL_PIN			GPIO_PIN_6
+#define RANGEFLOW_SDA_PORT			GPIOB
+#define RANGEFLOW_SDA_PIN			GPIO_PIN_7
+#define RANGEFLOW_BUS_HALF_US		5	/* 100 kHz while clocking by hand */
+
 void RangeFlowTask(void *argument);
-uint8_t RangeFlow_RangeReady(void);    /* VL53L1X initialized OK */
-uint8_t RangeFlow_FlowReady(void);     /* PMW3901 initialized OK */
+uint8_t RangeFlow_RangeReady(void); /* VL53L1X initialized OK */
+uint8_t RangeFlow_FlowReady(void);	/* PMW3901 initialized OK */
 
 #endif /* INC_SENSORTASK_RANGEFLOW_TASK_H_ */

@@ -6,9 +6,9 @@
 #include <stdint.h>
 
 typedef struct{
-    void              *buffer;
-    uint16_t           size;
-    SemaphoreHandle_t  mutex;
+	void *buffer;
+	uint16_t size;
+	SemaphoreHandle_t mutex;
 } MutexTopic_t;
 
 BaseType_t MutexTopic_Init(MutexTopic_t *topic, void *buffer, uint16_t size);

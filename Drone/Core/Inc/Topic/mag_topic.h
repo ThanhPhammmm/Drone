@@ -5,8 +5,8 @@
 #include <stdint.h>
 
 typedef struct{
-    float x, y, z;
-    uint32_t timestamp_us;
+	float x, y, z;
+	uint32_t timestamp_us;
 } Mag_Data_t;
 
 extern MutexTopic_t magTopic;

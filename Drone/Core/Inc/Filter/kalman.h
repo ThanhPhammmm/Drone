@@ -8,24 +8,24 @@
  * inversion: S = H P H' + R is a number. */
 
 /*
-Symbol                              Meaning
-  x                     state: the numbers we estimate
-  P                     covariance: how unsure we are about each state, and how the errors are linked
-  F                     how the state moves in one step (physics)
-  Q                     how much doubt each prediction step adds (process noise)
-  H                     what a sensor sees of the state
-  R                     the sensor’s noise (σ²)
-  y = z − H·x           innovation: reading minus what we expected to read
-  S = H·P·Hᵀ + R	    how big the innovation should normally be
-  K = P·Hᵀ / S	        the gain
+Symbol								Meaning
+	x						state: the numbers we estimate
+	P						covariance: how unsure we are about each state, and how the errors are linked
+	F						how the state moves in one step (physics)
+	Q						how much doubt each prediction step adds (process noise)
+	H 						what a sensor sees of the state
+	R 						the sensor’s noise (σ²)
+	y = z − H·x				innovation: reading minus what we expected to read
+	S = H·P·Hᵀ + R			how big the innovation should normally be
+	K = P·Hᵀ / S			the gain
 */
 
-#define KALMAN_MAX_N    4
+#define KALMAN_MAX_N	4
 
 typedef struct{
-    uint8_t n;
-    float x[KALMAN_MAX_N];                  /* state */
-    float P[KALMAN_MAX_N][KALMAN_MAX_N];    /* covariance */
+		uint8_t n;
+		float x[KALMAN_MAX_N];	/* state */
+		float P[KALMAN_MAX_N][KALMAN_MAX_N];	/* covariance */
 } Kalman_t;
 
 void Kalman_Init(Kalman_t *kf, uint8_t n, const float *x0, const float *var0);

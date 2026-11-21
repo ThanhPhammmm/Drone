@@ -14,12 +14,12 @@
 #include "flight_mode.h"
 
 typedef struct{
-    Thrust_Data_t data;
-    TaskHandle_t  controllerTask;
+	Thrust_Data_t data;
+	TaskHandle_t controllerTask;
 
-    float holdTarget;       /* m, commanded altitude */
-    float vzSetpoint;       /* m/s */
-    float hoverThrust;      /* thrust (made vertical) that hovers, measured on the way up */
+	float holdTarget;		/* m, commanded altitude */
+	float vzSetpoint;		/* m/s */
+	float hoverThrust;		/* thrust (made vertical) that hovers, measured on the way up */
 } AltitudeController_Handle_t;
 
 typedef enum{

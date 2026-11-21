@@ -16,173 +16,173 @@ void BMI088_SetTaskHandle(TaskHandle_t handle){
 }
 
 void BMI088_AccCS_Low(void){
-    HAL_GPIO_WritePin(ACC_CS_GPIO_Port, ACC_CS_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(ACC_CS_GPIO_Port, ACC_CS_Pin, GPIO_PIN_RESET);
 }
 
 void BMI088_AccCS_High(void){
-    HAL_GPIO_WritePin(ACC_CS_GPIO_Port, ACC_CS_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(ACC_CS_GPIO_Port, ACC_CS_Pin, GPIO_PIN_SET);
 }
 
 void BMI088_GyroCS_Low(void){
-    HAL_GPIO_WritePin(GYRO_CS_GPIO_Port, GYRO_CS_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GYRO_CS_GPIO_Port, GYRO_CS_Pin, GPIO_PIN_RESET);
 }
 
 void BMI088_GyroCS_High(void){
-    HAL_GPIO_WritePin(GYRO_CS_GPIO_Port, GYRO_CS_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(GYRO_CS_GPIO_Port, GYRO_CS_Pin, GPIO_PIN_SET);
 }
 
 static void BMI088_SPI_Recover(void){
-    (void)HAL_SPI_Abort(&hspi1);
-    BMI088_ClearDMACompletion();
+	(void)HAL_SPI_Abort(&hspi1);
+	BMI088_ClearDMACompletion();
 }
 
 HAL_StatusTypeDef BMI088_SPI_TransmitReceive_DMA(uint8_t *tx, uint8_t *rx, uint16_t len){
-    HAL_StatusTypeDef ret = HAL_SPI_TransmitReceive_DMA(&hspi1, tx, rx, len);
-    if(ret != HAL_OK) BMI088_SPI_Recover();
-    return ret;
+	HAL_StatusTypeDef ret = HAL_SPI_TransmitReceive_DMA(&hspi1, tx, rx, len);
+	if(ret != HAL_OK) BMI088_SPI_Recover();
+	return ret;
 }
 
 void BMI088_DMA_Callback(SPI_HandleTypeDef *hspi){
-    BaseType_t hpw = pdFALSE;
-    xSemaphoreGiveFromISR(imuDmaSem, &hpw);
-    portYIELD_FROM_ISR(hpw);
+	BaseType_t hpw = pdFALSE;
+	xSemaphoreGiveFromISR(imuDmaSem, &hpw);
+	portYIELD_FROM_ISR(hpw);
 }
 
 BMI088_Status_t BMI088_WaitDMA(void){
-    if(xSemaphoreTake(imuDmaSem, pdMS_TO_TICKS(BMI088_TIMEOUT_MS)) != pdTRUE){
-        BMI088_SPI_Recover();
-        return BMI088_TIMEOUT;
-    }
+	if(xSemaphoreTake(imuDmaSem, pdMS_TO_TICKS(BMI088_TIMEOUT_MS)) != pdTRUE){
+		BMI088_SPI_Recover();
+		return BMI088_TIMEOUT;
+	}
 
-    return BMI088_OK;
+	return BMI088_OK;
 }
 
 void BMI088_ClearDMACompletion(void){
-    while(xSemaphoreTake(imuDmaSem, 0) == pdTRUE){}
+	while(xSemaphoreTake(imuDmaSem, 0) == pdTRUE){}
 }
 
 BMI088_Status_t BMI088_Acc_WriteReg(uint8_t reg, uint8_t data){
-    txBuf[0] = reg & BMI088_WRITE_BITMASK;
-    txBuf[1] = data;
+	txBuf[0] = reg & BMI088_WRITE_BITMASK;
+	txBuf[1] = data;
 
-    memset(txBuf + 2, 0, sizeof(txBuf) - 2);
-    memset(rxBuf, 0, sizeof(rxBuf));
+	memset(txBuf + 2, 0, sizeof(txBuf) - 2);
+	memset(rxBuf, 0, sizeof(rxBuf));
 
-    BMI088_ClearDMACompletion();
-    BMI088_AccCS_Low();
-    HAL_StatusTypeDef ret = BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, 2);
-    if(ret != HAL_OK){
-        BMI088_AccCS_High();
-        return BMI088_ERROR;
-    }
-    BMI088_Status_t status = BMI088_WaitDMA();
-    BMI088_AccCS_High();
+	BMI088_ClearDMACompletion();
+	BMI088_AccCS_Low();
+	HAL_StatusTypeDef ret = BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, 2);
+	if(ret != HAL_OK){
+		BMI088_AccCS_High();
+		return BMI088_ERROR;
+	}
+	BMI088_Status_t status = BMI088_WaitDMA();
+	BMI088_AccCS_High();
 
-    return status;
+	return status;
 }
 
 BMI088_Status_t BMI088_Acc_ReadReg(uint8_t reg, uint8_t *data){
-    txBuf[0] = reg | BMI088_READ_BITMASK;
-    txBuf[1] = 0; // dummy byte for clock : 1 byte sent from master -> 1 byte sent back from slave.
-    txBuf[2] = 0;
+	txBuf[0] = reg | BMI088_READ_BITMASK;
+	txBuf[1] = 0; // dummy byte for clock : 1 byte sent from master -> 1 byte sent back from slave.
+	txBuf[2] = 0;
 
-    memset(txBuf + 3, 0, sizeof(txBuf) - 3);
-    memset(rxBuf, 0, sizeof(rxBuf));
+	memset(txBuf + 3, 0, sizeof(txBuf) - 3);
+	memset(rxBuf, 0, sizeof(rxBuf));
 
-    BMI088_ClearDMACompletion();
-    BMI088_AccCS_Low();
-    HAL_StatusTypeDef ret = BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, 3);
-    if(ret != HAL_OK){
-        BMI088_AccCS_High();
-        return BMI088_ERROR;
-    }
-    BMI088_Status_t status = BMI088_WaitDMA();
-    BMI088_AccCS_High();
-    if(status != BMI088_OK) return status;
-    *data = rxBuf[2];
+	BMI088_ClearDMACompletion();
+	BMI088_AccCS_Low();
+	HAL_StatusTypeDef ret = BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, 3);
+	if(ret != HAL_OK){
+		BMI088_AccCS_High();
+		return BMI088_ERROR;
+	}
+	BMI088_Status_t status = BMI088_WaitDMA();
+	BMI088_AccCS_High();
+	if(status != BMI088_OK) return status;
+	*data = rxBuf[2];
 
-    return BMI088_OK;
+	return BMI088_OK;
 }
 
 BMI088_Status_t BMI088_Acc_ReadRegs(uint8_t reg, uint8_t *data, uint16_t len){
-    if(len == 0u || (uint32_t)len + 2u > sizeof(txBuf)) return BMI088_ERROR;
+	if(len == 0u || (uint32_t)len + 2u > sizeof(txBuf)) return BMI088_ERROR;
 
-    txBuf[0] = reg | BMI088_READ_BITMASK;
+	txBuf[0] = reg | BMI088_READ_BITMASK;
 
-    memset(&txBuf[1], 0, len + 1); /* dummy byte + register data */
-    BMI088_ClearDMACompletion();
-    BMI088_AccCS_Low();
-    HAL_StatusTypeDef ret = BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, len + 2);
-    if(ret != HAL_OK){
-    	BMI088_AccCS_High();
-        return BMI088_ERROR;
-    }
+	memset(&txBuf[1], 0, len + 1); /* dummy byte + register data */
+	BMI088_ClearDMACompletion();
+	BMI088_AccCS_Low();
+	HAL_StatusTypeDef ret = BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, len + 2);
+	if(ret != HAL_OK){
+		BMI088_AccCS_High();
+		return BMI088_ERROR;
+	}
 
-    BMI088_Status_t status = BMI088_WaitDMA();
-    BMI088_AccCS_High();
-    if(status != BMI088_OK) return status;
-    memcpy(data, &rxBuf[2], len);
+	BMI088_Status_t status = BMI088_WaitDMA();
+	BMI088_AccCS_High();
+	if(status != BMI088_OK) return status;
+	memcpy(data, &rxBuf[2], len);
 
-    return BMI088_OK;
+	return BMI088_OK;
 }
 
 BMI088_Status_t BMI088_Gyro_WriteReg(uint8_t reg, uint8_t data){
-    txBuf[0] = reg & BMI088_WRITE_BITMASK;
-    txBuf[1] = data;
+	txBuf[0] = reg & BMI088_WRITE_BITMASK;
+	txBuf[1] = data;
 
-    memset(txBuf + 2, 0, sizeof(txBuf) - 2);
-    memset(rxBuf, 0, sizeof(rxBuf));
+	memset(txBuf + 2, 0, sizeof(txBuf) - 2);
+	memset(rxBuf, 0, sizeof(rxBuf));
 
-    BMI088_ClearDMACompletion();
-    BMI088_GyroCS_Low();
-    if(BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, 2) != HAL_OK){
-        BMI088_GyroCS_High();
-        return BMI088_ERROR;
-    }
-    BMI088_Status_t status = BMI088_WaitDMA();
-    BMI088_GyroCS_High();
+	BMI088_ClearDMACompletion();
+	BMI088_GyroCS_Low();
+	if(BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, 2) != HAL_OK){
+		BMI088_GyroCS_High();
+		return BMI088_ERROR;
+	}
+	BMI088_Status_t status = BMI088_WaitDMA();
+	BMI088_GyroCS_High();
 
-    return status;
+	return status;
 }
 
 BMI088_Status_t BMI088_Gyro_ReadReg(uint8_t reg, uint8_t *data){
-    txBuf[0] = reg | BMI088_READ_BITMASK;
-    txBuf[1] = 0; // dummy byte for clock
+	txBuf[0] = reg | BMI088_READ_BITMASK;
+	txBuf[1] = 0; // dummy byte for clock
 
-    memset(txBuf + 2, 0, sizeof(txBuf) - 2);
-    memset(rxBuf, 0, sizeof(rxBuf));
+	memset(txBuf + 2, 0, sizeof(txBuf) - 2);
+	memset(rxBuf, 0, sizeof(rxBuf));
 
-    BMI088_ClearDMACompletion();
-    BMI088_GyroCS_Low();
-    if(BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, 2) != HAL_OK){
-        BMI088_GyroCS_High();
-        return BMI088_ERROR;
-    }
-    BMI088_Status_t status = BMI088_WaitDMA();
-    BMI088_GyroCS_High();
-    if(status != BMI088_OK) return status;
+	BMI088_ClearDMACompletion();
+	BMI088_GyroCS_Low();
+	if(BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, 2) != HAL_OK){
+		BMI088_GyroCS_High();
+		return BMI088_ERROR;
+	}
+	BMI088_Status_t status = BMI088_WaitDMA();
+	BMI088_GyroCS_High();
+	if(status != BMI088_OK) return status;
 
-    *data = rxBuf[1];
+	*data = rxBuf[1];
 
-    return BMI088_OK;
+	return BMI088_OK;
 }
 
 BMI088_Status_t BMI088_Gyro_ReadRegs(uint8_t reg, uint8_t *data, uint16_t len){
-    if(len == 0u || (uint32_t)len + 1u > sizeof(txBuf)) return BMI088_ERROR;
+	if(len == 0u || (uint32_t)len + 1u > sizeof(txBuf)) return BMI088_ERROR;
 
-    txBuf[0] = reg | BMI088_READ_BITMASK;
+	txBuf[0] = reg | BMI088_READ_BITMASK;
 
-    memset(&txBuf[1], 0, len);
-    BMI088_ClearDMACompletion();
-    BMI088_GyroCS_Low();
-    if(BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, len + 1) != HAL_OK){
-        BMI088_GyroCS_High();
-        return BMI088_ERROR;
-    }
-    BMI088_Status_t status = BMI088_WaitDMA();
-    BMI088_GyroCS_High();
-    if(status != BMI088_OK) return status;
-    memcpy(data, &rxBuf[1], len);
+	memset(&txBuf[1], 0, len);
+	BMI088_ClearDMACompletion();
+	BMI088_GyroCS_Low();
+	if(BMI088_SPI_TransmitReceive_DMA(txBuf, rxBuf, len + 1) != HAL_OK){
+		BMI088_GyroCS_High();
+		return BMI088_ERROR;
+	}
+	BMI088_Status_t status = BMI088_WaitDMA();
+	BMI088_GyroCS_High();
+	if(status != BMI088_OK) return status;
+	memcpy(data, &rxBuf[1], len);
 
-    return BMI088_OK;
+	return BMI088_OK;
 }

@@ -7,11 +7,11 @@
  *
  *========================================================*/
 
-#define BMI088_ACC_CHIP_ID                 	0x1E
-#define BMI088_GYRO_CHIP_ID                	0x0F
+#define BMI088_ACC_CHIP_ID					0x1E
+#define BMI088_GYRO_CHIP_ID					0x0F
 
-#define BMI088_ACC_CHIP_ID_REG             	0x00
-#define BMI088_GYRO_CHIP_ID_REG            	0x00
+#define BMI088_ACC_CHIP_ID_REG				0x00
+#define BMI088_GYRO_CHIP_ID_REG				0x00
 
 /*=========================================================
  *
@@ -20,27 +20,27 @@
  *========================================================*/
 
 #define BMI088_ACC_ERR_REG					0x02
-#define BMI088_ACC_STATUS_REG              	0x03
+#define BMI088_ACC_STATUS_REG				0x03
 
-#define BMI088_ACC_X_LSB                   	0x12
-#define BMI088_ACC_X_MSB                   	0x13
-#define BMI088_ACC_Y_LSB                   	0x14
-#define BMI088_ACC_Y_MSB                   	0x15
-#define BMI088_ACC_Z_LSB                   	0x16
-#define BMI088_ACC_Z_MSB                   	0x17
+#define BMI088_ACC_X_LSB					0x12
+#define BMI088_ACC_X_MSB					0x13
+#define BMI088_ACC_Y_LSB					0x14
+#define BMI088_ACC_Y_MSB					0x15
+#define BMI088_ACC_Z_LSB					0x16
+#define BMI088_ACC_Z_MSB					0x17
 
 #define BMI088_ACC_TEMP_MSB					0x22
-#define BMI088_ACC_TEMP_LSB                	0x23
+#define BMI088_ACC_TEMP_LSB					0x23
 
-#define BMI088_ACC_CONF                    	0x40
-#define BMI088_ACC_RANGE                   	0x41
+#define BMI088_ACC_CONF						0x40
+#define BMI088_ACC_RANGE					0x41
 
-#define BMI088_ACC_INT1_IO_CTRL            	0x53
-#define BMI088_ACC_INT2_IO_CTRL            	0x54
+#define BMI088_ACC_INT1_IO_CTRL				0x53
+#define BMI088_ACC_INT2_IO_CTRL				0x54
 
-#define BMI088_ACC_INT_MAP_DATA            	0x58
+#define BMI088_ACC_INT_MAP_DATA				0x58
 
-#define BMI088_ACC_SOFTRESET               	0x7E
+#define BMI088_ACC_SOFTRESET				0x7E
 
 #define BMI088_ACC_PWR_CONF					0x7C
 #define BMI088_ACC_PWR_CTRL					0x7D
@@ -135,8 +135,8 @@
  *
  *========================================================*/
 
-#define BMI088_ACC_BWP_NORMAL 	            0xA0
-#define BMI088_ACC_BWP_OSR2 	            0x90
-#define BMI088_ACC_BWP_OSR4 	            0x80
+#define BMI088_ACC_BWP_NORMAL				0xA0
+#define BMI088_ACC_BWP_OSR2					0x90
+#define BMI088_ACC_BWP_OSR4					0x80
 
 #endif /* INC_SENSORDRIVER_BMI088_BMI088_REG_H_ */
