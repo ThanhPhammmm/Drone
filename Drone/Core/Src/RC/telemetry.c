@@ -76,6 +76,21 @@ static uint8_t TLM_BuildAttitude(uint8_t *buf, uint8_t rcSeq, uint8_t state){
 	f.yawRateSp = TLM_S16(rsp.yawRate * TLM_RAD2DEG * 10.0f);
 	f.tiltDeg	= (uint8_t)(acosf(tiltCos) * TLM_RAD2DEG + 0.5f);
 
+	/* compass heading 0..359.9 deg; -1 = no reading */
+	f.magHeading = -1;
+	if(att.magStatus & ATT_MAG_FRESH){
+		float h = att.magHeading * TLM_RAD2DEG;
+		if(h < 0.0f) h += 360.0f;
+		int32_t t = (int32_t)(h * 10.0f + 0.5f);
+		if(t >= 3600) t -= 3600;
+		if(t < 0) t	 = 0;
+		f.magHeading = (int16_t)t;
+	}
+	f.magStatus	= ((att.magStatus & ATT_MAG_FRESH) ? TLM_MAG_FRESH : 0U) |
+					((att.magStatus & ATT_MAG_OK) ? TLM_MAG_OK : 0U) |
+					((att.magStatus & ATT_MAG_IN_USE) ? TLM_MAG_IN_USE : 0U) |
+					((att.magStatus & ATT_MAG_REF) ? TLM_MAG_REF : 0U);
+
 	memcpy(buf, &f, sizeof(f));
 	return (uint8_t)sizeof(f);
 }

@@ -61,6 +61,7 @@ typedef struct{
 	float cosLat0;
 
 	uint8_t aligned;		/* yawOffset is known */
+	uint8_t headingNorth;	/* the compass runs the heading: yaw 0 is north, yawOffset starts at 0 */
 	float yawOffset;		/* rad, from north to the level frame's x */
 	float alignC;			/* weighted sum of the angle samples, as unit vectors */
 	float alignS;

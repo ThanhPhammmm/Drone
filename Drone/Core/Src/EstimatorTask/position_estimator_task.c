@@ -43,9 +43,6 @@
 #define POS_EST_ALIGN_SPREAD		0.97f	/* length of the mean direction: samples within ~14 deg */
 #define POS_EST_ALIGN_TRACK_GAIN	0.05f	/* after that: follow the slow gyro heading drift */
 
-/* Flow scale calibration (TFT page 6): disarmed, rocked by hand ~1 m over the
- * floor. Standing still, the camera sees only the turn, so counts / gyro turn
- * is the true counts per radian. */
 #define POS_EST_FLOWCAL_ROCK_NEEDED	0.30f	/* rad^2 per axis (sum of turn^2 over flow samples): ~10 s of +-20 deg at ~1 Hz */
 #define POS_EST_FLOWCAL_TIMEOUT_US	60000000U /* not rocked enough by then: fail */
 #define POS_EST_FLOWCAL_FIT_MIN		0.85f	/* counts must follow the rocking this well */
@@ -68,10 +65,9 @@ static PosGps_t gps;
 static PosHist_t hist[POS_EST_HISTORY];
 static uint8_t histIdx;	/* the next slot to write */
 
-/* flow counts -> radians; from calibration.h, or a page 6 result until power-off */
+/* flow counts -> radians */
 static float flowRadPerCount = 1.0f / CALIB_PMW3901_COUNTS_PER_RAD;
 
-/* sums for the flow scale calibration */
 static struct{
 	uint8_t on;
 	uint32_t startUs;
@@ -92,9 +88,6 @@ static void PositionEstimator_Init(void){
 	est.usedAgo		= POS_EST_LOSS_CYCLES;
 	gps.usedAgo		= POS_EST_GPS_LOSS_CYCLES;
 	gps.posUsedAgo	= POS_EST_GPS_REANCHOR_CYCLES;
-#if ATT_EST_USE_MAG
-	gps.aligned		= 1;	/* yaw 0 is (magnetic) north already */
-#endif
 	PosKF_Init(&kfX, 0.0f);
 	PosKF_Init(&kfY, 0.0f);
 }
@@ -116,7 +109,6 @@ static float PositionEstimator_Fit(float xy, float xx, float yy){
 	return (xx > 0.0f && yy > 0.0f) ? xy / sqrtf(xx * yy) : 0.0f;
 }
 
-/* Judge the sums: the counts per radian to use, or why not */
 static void PositionEstimator_FlowCalEnd(void){
 	float kF		= flowCal.cfP / flowCal.ppP;
 	float kR		= flowCal.crR / flowCal.rrR;
@@ -161,8 +153,6 @@ static void PositionEstimator_FlowCalProgress(int16_t res[6], float *pctF, float
 	res[3] = PositionEstimator_S16(PositionEstimator_Fit(flowCal.crR, flowCal.crcr, flowCal.rrR) * 1000.0f);
 }
 
-/* every step while it runs: cancel from the remote, or out of time
- * (also when the camera gives nothing at all) */
 static void PositionEstimator_FlowCalCheck(uint32_t nowUs){
 	if(CalSvc_CancelRequested(RC_CAL_FLOW)){
 		flowCal.on = 0;
@@ -177,9 +167,6 @@ static void PositionEstimator_FlowCalCheck(uint32_t nowUs){
 	}
 }
 
-/* One flow sample during the calibration. Standing still, the counts are the
- * turn alone: nose counts * RAD_PER_COUNT * FWD_SIGN = pitchTurn and
- * right counts * RAD_PER_COUNT * RIGHT_SIGN = -rollTurn (see FlowVelocity). */
 static void PositionEstimator_FlowCalAdd(const Flow_Data_t *flow, float rollTurn, float pitchTurn){
 	Altitude_Data_t alt;
 	uint8_t heightOk = AltitudeTopic_Copy(&alt, 0) == pdPASS && alt.aglValid &&
@@ -303,6 +290,21 @@ static void PositionEstimator_Align(const Gps_Data_t *g, const PosHist_t *then, 
 		gps.alignW	*= 0.5f;
 		gps.alignN	= POS_EST_ALIGN_SAMPLES / 2U;
 	}
+}
+
+/* The compass took over the heading (ATT_EST_USE_MAG 1, see attitude_estimator_task.h):
+ * yaw 0 is north from now on, so the GPS needs no turn. An angle found from the GPS
+ * before that was for the old yaw frame, and so was the GPS origin. */
+static void PositionEstimator_HeadingNorth(const Attitude_Data_t *att){
+	if(gps.headingNorth || !(att->magStatus & ATT_MAG_IN_USE)) return;
+	gps.headingNorth	= 1;
+	gps.aligned			= 1;
+	gps.yawOffset		= 0.0f;
+	gps.alignC			= 0.0f;
+	gps.alignS			= 0.0f;
+	gps.alignW			= 0.0f;
+	gps.alignN			= 0;
+	gps.posUsedAgo		= POS_EST_GPS_REANCHOR_CYCLES;	/* anchor the GPS origin again */
 }
 
 static void PositionEstimator_Gps(uint32_t nowUs, uint8_t standing, uint8_t flowFresh){
@@ -509,6 +511,7 @@ static void PositionEstimator_Step(const Attitude_Data_t *att){
 
 	uint8_t flowFresh = (est.usedAgo < POS_EST_GPS_TAKEOVER_CYCLES);
 	uint8_t flowInUse = (est.usedAgo < POS_EST_LOSS_CYCLES);
+	PositionEstimator_HeadingNorth(att);
 	PositionEstimator_Gps(att->timestamp_us, standing, flowFresh);
 	uint8_t gpsInUse = (gps.usedAgo < POS_EST_GPS_LOSS_CYCLES);
 

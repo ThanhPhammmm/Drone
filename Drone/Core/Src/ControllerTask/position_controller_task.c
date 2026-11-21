@@ -30,7 +30,7 @@
 #define POS_CTRL_BRAKE_MAX_S		2.0f	/* ...or after this long anyway. Until then it waits on the drone */
 
 /* Where the target starts when POS_HOLD comes on */
-#define POS_CTRL_RESUME_S			 3.0f	/* on within this long after lift-off, or back within this long
+#define POS_CTRL_RESUME_S			3.0f	/* on within this long after lift-off, or back within this long
 											 * after it stopped (a short dropout)... */
 #define POS_CTRL_RESUME_DIST		1.0f	/* ...the drone this close (m) to the spot it took off from / it held,
 											 * and the sticks not touched meanwhile: that spot is the target */

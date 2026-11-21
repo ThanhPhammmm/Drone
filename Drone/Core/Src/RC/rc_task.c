@@ -162,13 +162,13 @@ void RCTask(void *argument){
 			cosTilt = 1.0f - 2.0f * (attNow.q1 * attNow.q1 + attNow.q2 * attNow.q2);
 		}
 
-		/* TFT page 6: start or cancel a calibration (calib_service.c checks the calibration switch) */
+		/* TFT page 6: start or cancel a calibration */
 		if(!linkOk) CalSvc_Command(0, 0, 0);
 		else if(gotPacket) CalSvc_Command(latest.flags, 1, 
 										Arm_GetState() == DISARMED && !(latest.flags & RC_FLAG_ARM));
 		Arm_Input_t armIn;
 		armIn.armSwitch			= (latest.flags & RC_FLAG_ARM) ? 1U : 0U;
-		/* calibration switch on: never arms (only checked while disarmed, so it cannot cut an armed drone) */
+		/* calibration switch on: never arms, only checked while disarmed */
 		armIn.sensorsReady		= Calib_ReadyToArm() && 
 									!(linkOk && (latest.flags & RC_FLAG_CAL_MODE));
 		armIn.linkOk			= linkOk;

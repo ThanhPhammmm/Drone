@@ -296,8 +296,8 @@ void AltitudeEstimatorTask(void *argument){
 					agl < rangeStanding + ALT_EST_FLOOR_MARGIN_M;
 
 		Altitude_Data_t *alt = &altitudeEstimator.data;
-		alt->altitude		= initialized ? AltKF_Get(&altKF, ALT_KF_Z)			 : 0.0f;
-		alt->verticalSpeed	= initialized ? AltKF_Get(&altKF, ALT_KF_VZ)			: 0.0f;
+		alt->altitude		= initialized ? AltKF_Get(&altKF, ALT_KF_Z) : 0.0f;
+		alt->verticalSpeed	= initialized ? AltKF_Get(&altKF, ALT_KF_VZ) : 0.0f;
 		alt->accelBias		= initialized ? AltKF_Get(&altKF, ALT_KF_ACCEL_BIAS) : 0.0f;
 		if(coasting){
 			alt->altitude		= zCoast;

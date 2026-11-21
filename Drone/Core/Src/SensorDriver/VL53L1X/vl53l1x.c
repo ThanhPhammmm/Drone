@@ -45,10 +45,15 @@ static const uint8_t VL53L1X_StatusMap[24] = {
 };
 
 static const uint16_t VL53L1X_BudgetMs[7]	= { 15, 20, 33, 50, 100, 200, 500 };
+
 static const uint16_t VL53L1X_ShortA[7]		= { 0x001D, 0x0051, 0x00D6, 0x01AE, 0x02E1, 0x03E1, 0x0591 };
 static const uint16_t VL53L1X_ShortB[7]		= { 0x0027, 0x006E, 0x006E, 0x01E8, 0x0388, 0x0496, 0x05C1 };
+
 static const uint16_t VL53L1X_LongA[7]		= { 0, 0x001E, 0x0060, 0x00AD, 0x01CC, 0x02D9, 0x048F };
 static const uint16_t VL53L1X_LongB[7]		= { 0, 0x0022, 0x006E, 0x00C6, 0x01EA, 0x02F8, 0x04A4 };
+
+static const uint16_t VL53L1X_MediumA[7]	= { 0, 0x0028, 0x0080, 0x00E7, 0x0288, 0x0390, 0x04BF };
+static const uint16_t VL53L1X_MediumB[7]	= { 0, 0x0030, 0x009A, 0x018A, 0x02A3, 0x03AD, 0x04E5 };
 
 void VL53L1X_SetTaskHandle(TaskHandle_t handle){
 	vl53l1x.task = handle;
@@ -156,6 +161,10 @@ VL53L1X_Status_t VL53L1X_SetTimingBudget(uint16_t ms){
 			a = VL53L1X_ShortA[i];
 			b = VL53L1X_ShortB[i];
 		}
+		else if(vl53l1x.distanceMode == VL53L1X_DISTANCE_MEDIUM){
+			a = VL53L1X_MediumA[i];
+			b = VL53L1X_MediumB[i];
+		}
 		else{
 			a = VL53L1X_LongA[i];
 			b = VL53L1X_LongB[i];
@@ -177,6 +186,11 @@ VL53L1X_Status_t VL53L1X_SetDistanceMode(VL53L1X_DistanceMode_t mode){
 	if(mode == VL53L1X_DISTANCE_SHORT){
 		phasecal = 0x14; vcselA = 0x07; vcselB = 0x05; validPhase = 0x38;
 		woi = 0x0705; initialPhase = 0x0606;
+	}
+	else if(mode == VL53L1X_DISTANCE_MEDIUM){
+		/* phasecal: same time as short and long (0x14 x 8 = 0x0A x 16 = 160): 160 / 12 */
+		phasecal = 0x0D; vcselA = 0x0B; vcselB = 0x09; validPhase = 0x78;
+		woi = 0x0B09; initialPhase = 0x0A0A;
 	}
 	else if(mode == VL53L1X_DISTANCE_LONG){
 		phasecal = 0x0A; vcselA = 0x0F; vcselB = 0x0D; validPhase = 0xB8;

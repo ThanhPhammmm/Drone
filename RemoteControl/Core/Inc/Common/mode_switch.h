@@ -14,11 +14,11 @@
  *
  */
 
-#define MODE_SW_ALT_HOLD_PORT     GPIOB
-#define MODE_SW_ALT_HOLD_PIN      GPIO_PIN_14
+#define MODE_SW_ALT_HOLD_PORT	GPIOB
+#define MODE_SW_ALT_HOLD_PIN	GPIO_PIN_14
 
-#define MODE_SW_POS_HOLD_PORT     GPIOB
-#define MODE_SW_POS_HOLD_PIN      GPIO_PIN_13
+#define MODE_SW_POS_HOLD_PORT	GPIOB
+#define MODE_SW_POS_HOLD_PIN	GPIO_PIN_13
 
 RC_Mode_t ModeSwitch_Read(void);
 
