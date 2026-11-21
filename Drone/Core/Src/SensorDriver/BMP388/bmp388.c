@@ -3,7 +3,6 @@
 
 #define BARO_I2C                    hi2c2
 #define BMP388_I2C_TIMEOUT_MS       10
-#define BMP388_GROUND_REF_SAMPLES   100     /* ~1 s at 100 Hz */
 
 BMP388_Handle_t bmp388;
 

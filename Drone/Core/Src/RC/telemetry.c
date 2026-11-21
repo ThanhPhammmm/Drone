@@ -1,4 +1,5 @@
 #include "telemetry.h"
+#include "calib_service.h"
 
 #define TLM_RAD2DEG 			57.29578f
 #define TLM_ACCEL_G_PER_LSB		(12.0f / 32768.0f)
@@ -198,6 +199,27 @@ static uint8_t TLM_BuildGps(uint8_t *buf, uint8_t rcSeq, uint8_t state){
 	return (uint8_t)sizeof(f);
 }
 
+/* calibration from TFT page 6 */
+static uint8_t TLM_BuildCalib(uint8_t *buf, uint8_t rcSeq, uint8_t state){
+	CalSvc_Snapshot_t c;
+	CalSvc_Snapshot(&c);
+
+	TLM_Calib_t f;
+	f.magic      = TLM_MAGIC;
+	f.type       = TLM_FRAME_CALIB;
+	f.rcSeq      = rcSeq;
+	f.state      = state;
+	f.item       = c.item;
+	f.calState   = c.state;
+	f.progress   = c.progress;
+	f.reason     = c.reason;
+	f.itemStatus = c.itemStatus;
+	memcpy(f.result, c.result, sizeof(f.result));
+
+	memcpy(buf, &f, sizeof(f));
+	return (uint8_t)sizeof(f);
+}
+
 uint8_t Telemetry_Build(uint8_t *buf, uint8_t rcSeq, uint16_t rcLost){
 	static uint8_t next = TLM_FRAME_ATTITUDE;
 
@@ -217,7 +239,11 @@ uint8_t Telemetry_Build(uint8_t *buf, uint8_t rcSeq, uint16_t rcLost){
 		next = TLM_FRAME_GPS;
 	}
 	else{
-		len  = TLM_BuildGps(buf, rcSeq, state);
+		/* disarmed: every second turn sends the calibration frame (page 6) instead of the GPS */
+		static uint8_t calTurn = 0;
+		calTurn ^= 1U;
+		if(Arm_GetState() == DISARMED && calTurn) len = TLM_BuildCalib(buf, rcSeq, state);
+		else                                      len = TLM_BuildGps(buf, rcSeq, state);
 		next = TLM_FRAME_ATTITUDE;
 	}
 	return len;

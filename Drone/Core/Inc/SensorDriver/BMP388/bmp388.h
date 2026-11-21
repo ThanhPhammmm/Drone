@@ -10,6 +10,8 @@
 
 #define BMP388_INT_PIN GPIO_PIN_8
 
+#define BMP388_GROUND_REF_SAMPLES   100     /* ~2 s at the 50 Hz output rate */
+
 typedef struct{
     BMP388_Raw_t       raw;
     BMP388_Calib_t     calib;

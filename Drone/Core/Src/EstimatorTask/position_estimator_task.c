@@ -43,6 +43,16 @@
 #define POS_EST_ALIGN_SPREAD        0.97f     /* length of the mean direction: samples within ~14 deg */
 #define POS_EST_ALIGN_TRACK_GAIN    0.05f     /* after that: follow the slow gyro heading drift */
 
+/* Flow scale calibration (TFT page 6): disarmed, rocked by hand ~1 m over the
+ * floor. Standing still, the camera sees only the turn, so counts / gyro turn
+ * is the true counts per radian. */
+#define POS_EST_FLOWCAL_ROCK_NEEDED 0.30f     /* rad^2 per axis (sum of turn^2 over flow samples): ~10 s of +-20 deg at ~1 Hz */
+#define POS_EST_FLOWCAL_TIMEOUT_US  60000000U /* not rocked enough by then: fail */
+#define POS_EST_FLOWCAL_FIT_MIN     0.85f     /* counts must follow the rocking this well */
+#define POS_EST_FLOWCAL_K_MIN       150.0f    /* counts per rad outside this: not believable */
+#define POS_EST_FLOWCAL_K_MAX       1500.0f
+#define POS_EST_FLOWCAL_UNEVEN      0.15f     /* the two axes of one chip must agree this well */
+
 #define POS_EST_HISTORY             32U       /* filter steps kept for the GPS delay */
 #define POS_EST_EARTH_RADIUS_M      6371000.0f
 #define POS_EST_E7DEG_TO_RAD        (1e-7f * 0.017453293f)
@@ -57,6 +67,18 @@ static PosEst_t  est;
 static PosGps_t  gps;
 static PosHist_t hist[POS_EST_HISTORY];
 static uint8_t   histIdx;           /* the next slot to write */
+
+/* flow counts -> radians; from calibration.h, or a page 6 result until power-off */
+static float flowRadPerCount = 1.0f / CALIB_PMW3901_COUNTS_PER_RAD;
+
+/* sums for the flow scale calibration */
+static struct{
+	uint8_t  on;
+	uint32_t startUs;
+	float cfP, ppP, cfcf;   /* nose counts x pitch turn, pitch turn^2, nose counts^2 */
+	float crR, rrR, crcr;   /* right counts x roll turn, roll turn^2, right counts^2 */
+	float cfR, crP;         /* the cross terms */
+} flowCal;
 
 void PositionEstimator_SetTaskHandle(TaskHandle_t handle){
 	positionEstimator.positionTask = handle;
@@ -82,6 +104,115 @@ static float PositionEstimator_Wrap(float a){
 	while(a >  POS_EST_PI) a -= 2.0f * POS_EST_PI;
 	while(a < -POS_EST_PI) a += 2.0f * POS_EST_PI;
 	return a;
+}
+
+static int16_t PositionEstimator_S16(float v){
+	if(v >  32767.0f) v =  32767.0f;
+	if(v < -32767.0f) v = -32767.0f;
+	return (int16_t)(v + (v >= 0.0f ? 0.5f : -0.5f));
+}
+
+static float PositionEstimator_Fit(float xy, float xx, float yy){
+	return (xx > 0.0f && yy > 0.0f) ? xy / sqrtf(xx * yy) : 0.0f;
+}
+
+/* Judge the sums: the counts per radian to use, or why not */
+static void PositionEstimator_FlowCalEnd(void){
+	float kF = flowCal.cfP / flowCal.ppP;
+	float kR = flowCal.crR / flowCal.rrR;
+	float fitF   = PositionEstimator_Fit(flowCal.cfP, flowCal.cfcf, flowCal.ppP);
+	float fitR   = PositionEstimator_Fit(flowCal.crR, flowCal.crcr, flowCal.rrR);
+	float crossF = PositionEstimator_Fit(flowCal.cfR, flowCal.cfcf, flowCal.rrR);   /* nose counts vs roll */
+	float crossR = PositionEstimator_Fit(flowCal.crP, flowCal.crcr, flowCal.ppP);   /* right counts vs pitch */
+	float k = 0.5f * (kF + kR);
+
+	uint8_t why;
+	if(fabsf(crossF) > fabsf(fitF) && fabsf(crossR) > fabsf(fitR))          why = TLM_CAL_AXES_SWAPPED;
+	else if(fitF < -POS_EST_FLOWCAL_FIT_MIN || fitR < -POS_EST_FLOWCAL_FIT_MIN) why = TLM_CAL_WRONG_SIGN;
+	else if(fitF < POS_EST_FLOWCAL_FIT_MIN || fitR < POS_EST_FLOWCAL_FIT_MIN)   why = TLM_CAL_BAD_FIT;
+	else if(kF < POS_EST_FLOWCAL_K_MIN || kF > POS_EST_FLOWCAL_K_MAX ||
+	        kR < POS_EST_FLOWCAL_K_MIN || kR > POS_EST_FLOWCAL_K_MAX)           why = TLM_CAL_OUT_OF_RANGE;
+	else if(fabsf(kF - kR) > POS_EST_FLOWCAL_UNEVEN * k)                       why = TLM_CAL_UNEVEN;
+	else                                                                       why = TLM_CAL_OK;
+
+	if(why == TLM_CAL_OK) flowRadPerCount = 1.0f / k;       /* in use now, until power-off */
+
+	int16_t r[6];
+	r[0] = PositionEstimator_S16(kF);
+	r[1] = PositionEstimator_S16(kR);
+	r[2] = PositionEstimator_S16(fitF * 1000.0f);
+	r[3] = PositionEstimator_S16(fitR * 1000.0f);
+	r[4] = PositionEstimator_S16(k);
+	r[5] = 0;
+	flowCal.on = 0;
+	CalSvc_Finish(RC_CAL_FLOW, why, r);
+}
+
+/* how far each axis has been rocked (%), and the fit so far */
+static void PositionEstimator_FlowCalProgress(int16_t res[6], float *pctF, float *pctR){
+	float f = flowCal.ppP * 100.0f / POS_EST_FLOWCAL_ROCK_NEEDED;
+	float r = flowCal.rrR * 100.0f / POS_EST_FLOWCAL_ROCK_NEEDED;
+	*pctF = (f > 100.0f) ? 100.0f : f;
+	*pctR = (r > 100.0f) ? 100.0f : r;
+	memset(res, 0, 6 * sizeof(int16_t));
+	res[0] = PositionEstimator_S16(*pctF);
+	res[1] = PositionEstimator_S16(*pctR);
+	res[2] = PositionEstimator_S16(PositionEstimator_Fit(flowCal.cfP, flowCal.cfcf, flowCal.ppP) * 1000.0f);
+	res[3] = PositionEstimator_S16(PositionEstimator_Fit(flowCal.crR, flowCal.crcr, flowCal.rrR) * 1000.0f);
+}
+
+/* every step while it runs: cancel from the remote, or out of time
+ * (also when the camera gives nothing at all) */
+static void PositionEstimator_FlowCalCheck(uint32_t nowUs){
+	if(CalSvc_CancelRequested(RC_CAL_FLOW)){
+		flowCal.on = 0;
+		CalSvc_Finish(RC_CAL_FLOW, TLM_CAL_CANCELLED, NULL);
+	}
+	else if((uint32_t)(nowUs - flowCal.startUs) >= POS_EST_FLOWCAL_TIMEOUT_US){
+		int16_t res[6];
+		float pctF, pctR;
+		PositionEstimator_FlowCalProgress(res, &pctF, &pctR);
+		flowCal.on = 0;
+		CalSvc_Finish(RC_CAL_FLOW, TLM_CAL_ROCK_MORE, res);
+	}
+}
+
+/* One flow sample during the calibration. Standing still, the counts are the
+ * turn alone: nose counts * RAD_PER_COUNT * FWD_SIGN = pitchTurn and
+ * right counts * RAD_PER_COUNT * RIGHT_SIGN = -rollTurn (see FlowVelocity). */
+static void PositionEstimator_FlowCalAdd(const Flow_Data_t *flow, float rollTurn, float pitchTurn){
+	Altitude_Data_t alt;
+	uint8_t heightOk = AltitudeTopic_Copy(&alt, 0) == pdPASS && alt.aglValid &&
+	                   alt.agl >= POS_EST_HEIGHT_MIN_M && alt.agl <= POS_EST_HEIGHT_MAX_M;
+	if(flow->valid && heightOk &&
+	   flow->dt_us >= POS_EST_FLOW_DT_MIN_US && flow->dt_us <= POS_EST_FLOW_DT_MAX_US){
+#if POS_EST_FLOW_SWAP_XY
+		float cf = POS_EST_FLOW_FWD_SIGN   * (float)flow->deltaY;
+		float cr = POS_EST_FLOW_RIGHT_SIGN * (float)flow->deltaX;
+#else
+		float cf = POS_EST_FLOW_FWD_SIGN   * (float)flow->deltaX;
+		float cr = POS_EST_FLOW_RIGHT_SIGN * (float)flow->deltaY;
+#endif
+		float p = pitchTurn;
+		float r = -rollTurn;
+		flowCal.cfP  += cf * p;
+		flowCal.ppP  += p * p;
+		flowCal.cfcf += cf * cf;
+		flowCal.crR  += cr * r;
+		flowCal.rrR  += r * r;
+		flowCal.crcr += cr * cr;
+		flowCal.cfR  += cf * r;
+		flowCal.crP  += cr * p;
+	}
+
+	int16_t res[6];
+	float pctF, pctR;
+	PositionEstimator_FlowCalProgress(res, &pctF, &pctR);
+	if(pctF >= 100.0f && pctR >= 100.0f){
+		PositionEstimator_FlowCalEnd();
+		return;
+	}
+	CalSvc_Progress(RC_CAL_FLOW, (uint8_t)(pctF < pctR ? pctF : pctR), res);
 }
 
 static uint8_t PositionEstimator_FlowVelocity(const Attitude_Data_t *att, const Flow_Data_t *flow,
@@ -111,8 +242,8 @@ static uint8_t PositionEstimator_FlowVelocity(const Attitude_Data_t *att, const 
 #endif
 
 	/* remove the pitch and roll the camera saw */											
-	float angleFwd   = POS_EST_FLOW_FWD_SIGN   * countsFwd   * PMW3901_RAD_PER_COUNT - pitchTurn;
-	float angleRight = POS_EST_FLOW_RIGHT_SIGN * countsRight * PMW3901_RAD_PER_COUNT + rollTurn;
+	float angleFwd   = POS_EST_FLOW_FWD_SIGN   * countsFwd   * flowRadPerCount - pitchTurn;
+	float angleRight = POS_EST_FLOW_RIGHT_SIGN * countsRight * flowRadPerCount + rollTurn;
 
 	float dt     = (float)flow->dt_us * 1e-6f;
 	/* s = angle × height 
@@ -294,6 +425,13 @@ static void PositionEstimator_Step(const Attitude_Data_t *att){
 		return;
 	}
 
+	if(CalSvc_Take(RC_CAL_FLOW)){
+		memset(&flowCal, 0, sizeof(flowCal));
+		flowCal.on      = 1;
+		flowCal.startUs = att->timestamp_us;
+	}
+	if(flowCal.on) PositionEstimator_FlowCalCheck(att->timestamp_us);
+
 	if(att->timestamp_us == est.lastSampleUs) return;
 	float sampleDt = (float)(uint32_t)(att->timestamp_us - est.lastSampleUs) * 1e-6f;
 	est.lastSampleUs = att->timestamp_us;
@@ -314,6 +452,7 @@ static void PositionEstimator_Step(const Attitude_Data_t *att){
 	Flow_Data_t flow;
 	if(FlowTopic_Copy(&flow, 0) == pdPASS && flow.timestamp_us != 0 && flow.timestamp_us != est.lastFlowUs){
 		est.lastFlowUs  = flow.timestamp_us;
+		if(flowCal.on) PositionEstimator_FlowCalAdd(&flow, est.rollTurn, est.pitchTurn);
 		est.flowPending = PositionEstimator_FlowVelocity(att, &flow, est.rollTurn, est.pitchTurn,
 		                                                 &est.flowVx, &est.flowVy, &est.flowStd);
 		est.rollTurn  = 0.0f;

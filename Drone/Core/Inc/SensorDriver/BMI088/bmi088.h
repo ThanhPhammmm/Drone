@@ -36,6 +36,7 @@ BMI088_Status_t BMI088_GetData(BMI088_Data_t *imu);
 void BMI088_ParseData(void);
 void BMI088_Convert(void);
 BMI088_Status_t BMI088_Calibrate(uint32_t numSamples);
+void BMI088_SetCalibHook(uint8_t (*hook)(uint32_t done, uint32_t total));   /* NULL = none */
 void BMI088_Accel_Convert(void);
 void BMI088_Gyro_Convert(void);
 uint8_t BMI088_IsCalibrated(void);

@@ -13,8 +13,8 @@
 #include "arm.h"
 
 typedef struct{
-    Altitude_Data_t data;
-    TaskHandle_t altitudeTask;
+	Altitude_Data_t data;
+	TaskHandle_t altitudeTask;
 } AltitudeEstimator_Handle_t;
 
 void AltitudeEstimatorTask(void *argument);

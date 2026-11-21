@@ -70,6 +70,30 @@ static void Mag_Restart(void){
     qmc5883.calib = cal;
 }
 
+/* ---- calibration asked from the remote (TFT page 6) ----
+ * The old values are kept here and put back on cancel or failure. */
+static uint8_t            baroSvc;          /* the running baro calibration was asked from the remote */
+static BMP388_GroundRef_t baroOld;
+static Calib_Status_t     baroOldStatus;
+static uint8_t            magSvc;
+static QMC5883_Calib_t    magOld;
+static Calib_Status_t     magOldStatus;
+
+static int16_t MagBaro_S16(float v){
+    if(v >  32767.0f) v =  32767.0f;
+    if(v < -32767.0f) v = -32767.0f;
+    return (int16_t)(v + (v >= 0.0f ? 0.5f : -0.5f));
+}
+
+/* turned x, y, z: how far each axis has swept, % of what the calibration needs */
+static void Mag_Turned(int16_t r[6]){
+    for(uint8_t k = 0; k < 3; k++){
+        float span = qmc5883.calib.maxV[k] - qmc5883.calib.minV[k];
+        float pct  = (span > 0.0f) ? span * 100.0f / QMC5883_CALIB_MIN_SPAN : 0.0f;
+        r[k] = MagBaro_S16(pct > 100.0f ? 100.0f : pct);
+    }
+}
+
 /* 1 = a new sample was read. woken = the INT edge said so, and its time is
  * the sample's time. */
 static uint8_t Baro_Update(uint8_t woken){
@@ -83,11 +107,34 @@ static uint8_t Baro_Update(uint8_t woken){
 #endif
     }
 
+    if(CalSvc_Take(RC_CAL_BARO)){
+        baroOld       = bmp388.groundRef;
+        baroOldStatus = Calib_GetStatus(CALIB_SENSOR_BMP388);
+        baroSvc       = 1;
+        BMP388_GroundRefReset();
+        Calib_Start(CALIB_SENSOR_BMP388);
+    }
+    if(baroSvc && CalSvc_CancelRequested(RC_CAL_BARO)){
+        bmp388.groundRef = baroOld;
+        Calib_SetStatus(CALIB_SENSOR_BMP388, baroOldStatus);
+        baroSvc = 0;
+        CalSvc_Finish(RC_CAL_BARO, TLM_CAL_CANCELLED, NULL);
+    }
+
     if(!BMP388_DataReady() || BMP388_Read() != BMP388_OK) return 0;
 
     if(Calib_GetStatus(CALIB_SENSOR_BMP388) == CALIB_RUNNING){
         BMP388_GroundRefAccumulate();
-        if(bmp388.groundRef.valid) Calib_SetStatus(CALIB_SENSOR_BMP388, CALIB_DONE);
+        if(baroSvc) CalSvc_Progress(RC_CAL_BARO, (uint8_t)(bmp388.groundRef.samples * 100U / BMP388_GROUND_REF_SAMPLES), NULL);
+        if(bmp388.groundRef.valid){
+            Calib_SetStatus(CALIB_SENSOR_BMP388, CALIB_DONE);
+            if(baroSvc){
+                int16_t r[6] = {0};
+                r[0] = MagBaro_S16(bmp388.groundRef.pressure_pa * 0.1f);   /* Pa -> 0.1 hPa */
+                baroSvc = 0;
+                CalSvc_Finish(RC_CAL_BARO, TLM_CAL_OK, r);
+            }
+        }
     }
     else if(Calib_Usable(CALIB_SENSOR_BMP388)){
         Baro_Data_t baro;
@@ -112,11 +159,31 @@ static uint8_t Mag_Update(void){
 #endif
     }
 
+    if(CalSvc_Take(RC_CAL_COMPASS)){
+        magOld       = qmc5883.calib;
+        magOldStatus = Calib_GetStatus(CALIB_SENSOR_QMC5883);
+        magSvc       = 1;
+        QMC5883_CalibReset();
+        Calib_Start(CALIB_SENSOR_QMC5883);
+    }
+    if(magSvc && CalSvc_CancelRequested(RC_CAL_COMPASS)){
+        qmc5883.calib = magOld;
+        Calib_SetStatus(CALIB_SENSOR_QMC5883, magOldStatus);
+        magSvc = 0;
+        CalSvc_Finish(RC_CAL_COMPASS, TLM_CAL_CANCELLED, NULL);
+    }
+
     uint8_t got = 0;
     if(QMC5883_DataReady() && QMC5883_Read() == QMC5883_OK){
         got = 1;
         if(Calib_GetStatus(CALIB_SENSOR_QMC5883) == CALIB_RUNNING){
             QMC5883_CalibAccumulate();
+            if(magSvc){
+                int16_t r[6] = {0};
+                Mag_Turned(r);
+                CalSvc_Progress(RC_CAL_COMPASS,
+                                (uint8_t)(Calib_ElapsedMs(CALIB_SENSOR_QMC5883) * 100U / CALIB_QMC5883_DURATION_MS), r);
+            }
         }
         else if(Calib_Usable(CALIB_SENSOR_QMC5883)){
             Mag_Data_t mag;
@@ -132,8 +199,27 @@ static uint8_t Mag_Update(void){
        Calib_ElapsedMs(CALIB_SENSOR_QMC5883) >= CALIB_QMC5883_DURATION_MS){
         /* an axis that did not sweep far enough = the drone was not turned:
          * those offsets would be noise, so the compass stays off */
-        Calib_SetStatus(CALIB_SENSOR_QMC5883,
-                        (QMC5883_CalibFinish() == QMC5883_OK) ? CALIB_DONE : CALIB_FAILED);
+        uint8_t ok = (QMC5883_CalibFinish() == QMC5883_OK);
+        if(magSvc){
+            int16_t r[6] = {0};
+            magSvc = 0;
+            if(ok){
+                Calib_SetStatus(CALIB_SENSOR_QMC5883, CALIB_DONE);
+                r[0] = MagBaro_S16(qmc5883.calib.offset[0]);
+                r[1] = MagBaro_S16(qmc5883.calib.offset[1]);
+                r[2] = MagBaro_S16(qmc5883.calib.offset[2]);
+                CalSvc_Finish(RC_CAL_COMPASS, TLM_CAL_OK, r);
+            }
+            else{
+                Mag_Turned(r);                      /* which axis was short */
+                qmc5883.calib = magOld;             /* asked from the remote: keep the old offsets */
+                Calib_SetStatus(CALIB_SENSOR_QMC5883, magOldStatus);
+                CalSvc_Finish(RC_CAL_COMPASS, TLM_CAL_TURN_MORE, r);
+            }
+        }
+        else{
+            Calib_SetStatus(CALIB_SENSOR_QMC5883, ok ? CALIB_DONE : CALIB_FAILED);
+        }
     }
     return got;
 }

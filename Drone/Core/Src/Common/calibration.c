@@ -1,6 +1,7 @@
 #include "calibration.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "calib_service.h"
 
 typedef struct{
 	volatile Calib_Status_t status;
@@ -57,7 +58,8 @@ uint8_t Calib_IsTurn(Calib_Sensor_t s){
 uint8_t Calib_ReadyToArm(void){
 	return Calib_Usable(CALIB_SENSOR_BMI088) &&
 	       Calib_Usable(CALIB_SENSOR_BMP388) &&
-	       Calib_Finished(CALIB_SENSOR_QMC5883);
+	       Calib_Finished(CALIB_SENSOR_QMC5883) &&
+	       !CalSvc_Busy();                  /* nothing asked from TFT page 6 still going */
 }
 
 const char *Calib_StatusName(Calib_Status_t status){
