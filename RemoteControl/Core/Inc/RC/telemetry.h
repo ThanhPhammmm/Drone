@@ -4,85 +4,87 @@
 #include <stdint.h>
 
 typedef struct{
-    /* link, measured here */
-    uint8_t  linkQuality;       /* % of the last 50 RC packets the drone ACKed */
-    uint32_t frames;            /* telemetry frames received */
-    uint32_t lastFrameTick;
+	/* link, measured here */
+	uint8_t linkQuality;	/* % of the last 50 RC packets the drone ACKed */
+	uint32_t frames;	/* telemetry frames received */
+	uint32_t lastFrameTick;
 
-    /* drone state */
-    uint8_t  armState;          /* 0 DISARMED 1 ARMING 2 ARMED_GROUND 3 TAKEOFF 4 AIRBORNE 5 LANDING 6 FAILSAFE */
-    uint8_t  mode;              /* 0 ANGLE 1 ALT_HOLD 2 POS_HOLD */
-    uint8_t  imuCalibrated;
-    uint8_t  baroCalibrated;
-    uint8_t  magCalibrated;
+	/* drone state */
+	uint8_t armState;	/* 0 DISARMED 1 ARMING 2 ARMED_GROUND 3 TAKEOFF 4 AIRBORNE 5 LANDING 6 FAILSAFE */
+	uint8_t mode;	/* 0 ANGLE 1 ALT_HOLD 2 POS_HOLD */
+	uint8_t imuCalibrated;
+	uint8_t baroCalibrated;
+	uint8_t magCalibrated;
 
-    /* IMU */
-    float    gyro[3];           /* deg/s, roll/pitch/yaw rate */
-    float    accel[3];          /* m/s^2, x front, y right, z down */
+	/* IMU */
+	float gyro[3];	/* deg/s, roll/pitch/yaw rate */
+	float accel[3];	/* m/s^2, x front, y right, z down */
 
-    /* attitude loop */
-    float    roll, pitch, yaw;  /* deg */
-    float    rollSp, pitchSp;   /* deg, the angle flown now */
-    float    yawRateSp;         /* deg/s */
-    uint8_t  tiltDeg;           /* deg from level */
+	/* attitude loop */
+	float roll, pitch, yaw;	/* deg */
+	float rollSp, pitchSp;	/* deg, the angle flown now */
+	float yawRateSp;	/* deg/s */
+	uint8_t tiltDeg;	/* deg from level */
+	float magHeading;	/* deg, compass: 0 north, 90 east; < 0 = no reading */
+	uint8_t magStatus;	/* TLM_MAG_*: readings arrive, field clean, heading follows it, field learnt */
 
-    /* outputs */
-    uint16_t motor[4];          /* us: M1 FR, M2 RR, M3 RL, M4 FL */
-    float    thrust;            /* 0..1 */
-    float    hoverThrust;       /* 0..1, measured in flight; 0 = not known yet */
+	/* outputs */
+	uint16_t motor[4];	/* us: M1 FR, M2 RR, M3 RL, M4 FL */
+	float thrust;	/* 0..1 */
+	float hoverThrust;	/* 0..1, measured in flight; 0 = not known yet */
 
-    /* altitude */
-    float    altitude;          /* m */
-    float    altitudeSp;        /* m, height it holds */
-    float    verticalSpeed;     /* m/s */
-    float    climbSp;           /* m/s */
-    float    accelUp;           /* m/s^2 */
-    float    accelBias;         /* m/s^2, altitude estimator's accel bias */
-    float    aboveFloor;        /* m, height above the floor */
+	/* altitude */
+	float altitude;	/* m */
+	float altitudeSp;	/* m, height it holds */
+	float verticalSpeed;	/* m/s */
+	float climbSp;	/* m/s */
+	float accelUp;	/* m/s^2 */
+	float accelBias;	/* m/s^2, altitude estimator's accel bias */
+	float aboveFloor;	/* m, height above the floor */
 
-    /* position, level frame: x = the nose at power-up, y = its right */
-    float    x, y;              /* m */
-    float    xSp, ySp;          /* m, the spot it holds */
-    float    vx, vy;            /* m/s */
+	/* position, level frame: x = the nose at power-up, y = its right */
+	float x, y;	/* m */
+	float xSp, ySp;	/* m, the spot it holds */
+	float vx, vy;	/* m/s */
 
-    /* range and flow sensors */
-    uint8_t  sensorValid;       /* TLM_VALID_ */
-    uint8_t  rangeReady;        /* VL53L1X initialized */
-    uint8_t  flowReady;         /* PMW3901 initialized */
-    float    range;             /* m, ToF along the sensor axis */
-    float    rangeHeight;       /* m, ToF tilt corrected */
-    uint8_t  rangeStatus;       /* 0 ok, 1 sigma, 2 signal, 3 too close, 4 too far, 7 wrap, 255 none */
-    int16_t  flowX, flowY;      /* counts in the last sample */
-    uint8_t  squal;
+	/* range and flow sensors */
+	uint8_t sensorValid;	/* TLM_VALID_ */
+	uint8_t rangeReady;	/* VL53L1X initialized */
+	uint8_t flowReady;	/* PMW3901 initialized */
+	float range;	/* m, ToF along the sensor axis */
+	float rangeHeight;	/* m, ToF tilt corrected */
+	uint8_t rangeStatus;	/* 0 ok, 1 sigma, 2 signal, 3 too close, 4 too far, 7 wrap, 255 none */
+	int16_t flowX, flowY;	/* counts in the last sample */
+	uint8_t squal;
 
-    /* health */
-    float    vibration;         /* m/s^2 */
-    uint16_t rcLost;
+	/* health */
+	float vibration;	/* m/s^2 */
+	uint16_t rcLost;
 
-    /* GPS */
-    uint8_t  gpsFound;          /* the receiver answers */
-    uint8_t  gpsFix;            /* 0 none, 2 2D, 3 3D, ... */
-    uint8_t  gpsFixOk;          /* the receiver trusts its fix */
-    uint8_t  gpsSats;
-    double   lat, lon;          /* deg */
-    float    altMsl;            /* m */
-    float    hAcc;              /* m */
-    float    velN, velE;        /* m/s */
-    float    sAcc;              /* m/s */
-    uint8_t  gpsAligned;        /* heading tied to north: the GPS can hold the position */
-    float    yawOffset;         /* deg, north -> level frame x */
-    float    gpsX, gpsY;        /* m, the GPS fix in the level frame */
-    uint8_t  posSource;         /* 0 none, 1 flow, 2 GPS */
+	/* GPS */
+	uint8_t gpsFound;	/* the receiver answers */
+	uint8_t gpsFix;	/* 0 none, 2 2D, 3 3D, ... */
+	uint8_t gpsFixOk;	/* the receiver trusts its fix */
+	uint8_t gpsSats;
+	double lat, lon;	/* deg */
+	float altMsl;	/* m */
+	float hAcc;	/* m */
+	float velN, velE;	/* m/s */
+	float sAcc;	/* m/s */
+	uint8_t gpsAligned;	/* heading tied to north: the GPS can hold the position */
+	float yawOffset;	/* deg, north -> level frame x */
+	float gpsX, gpsY;	/* m, the GPS fix in the level frame */
+	uint8_t posSource;	/* 0 none, 1 flow, 2 GPS */
 
-    /* calibration (TFT page 6), sent only while the drone is disarmed */
-    uint32_t calFrames;         /* calibration frames received */
-    uint32_t calTick;           /* when the last one came */
-    uint8_t  calItem;           /* RC_CalItem_t of the last request */
-    uint8_t  calState;          /* TLM_CAL_IDLE .. TLM_CAL_FAILED */
-    uint8_t  calProgress;       /* % */
-    uint8_t  calReason;         /* TLM_CAL_OK .. */
-    uint8_t  calItemStatus;     /* TLM_CAL_ITEM_* per item, 2 bits each */
-    int16_t  calResult[6];      /* raw, scaled as in TLM_Calib_t */
+	/* calibration (TFT page 6), sent only while the drone is disarmed */
+	uint32_t calFrames;	/* calibration frames received */
+	uint32_t calTick;	/* when the last one came */
+	uint8_t calItem;	/* RC_CalItem_t of the last request */
+	uint8_t calState;	/* TLM_CAL_IDLE .. TLM_CAL_FAILED */
+	uint8_t calProgress;	/* % */
+	uint8_t calReason;	/* TLM_CAL_OK .. */
+	uint8_t calItemStatus;	/* TLM_CAL_ITEM_* per item, 2 bits each */
+	int16_t calResult[6];	/* raw, scaled as in TLM_Calib_t */
 } Telemetry_t;
 
 extern Telemetry_t telemetry;

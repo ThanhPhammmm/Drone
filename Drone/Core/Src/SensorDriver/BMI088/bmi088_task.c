@@ -14,7 +14,6 @@ static BaseType_t IMU_Signal_Init(void) {
 	return (imuDmaSem != NULL) ? pdPASS : pdFAIL;
 }
 
-/* ---- calibration asked from the remote (TFT page 6) ---- */
 static uint8_t IMU_CalibHook(uint32_t done, uint32_t total){
 	CalSvc_Progress(RC_CAL_IMU, (uint8_t)(done * 100U / total), NULL);
 	return CalSvc_CancelRequested(RC_CAL_IMU);
@@ -94,7 +93,7 @@ void IMUTask(void *argument){
 	while(1){
 		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 		if(CalSvc_Take(RC_CAL_IMU)){
-			IMU_RunCalibration();	/* no IMU data meanwhile: the drone is disarmed */
+			IMU_RunCalibration();
 			gyroDtValid = 0;	/* the next sample's dt would span the ~20 s pause */
 			continue;
 		}

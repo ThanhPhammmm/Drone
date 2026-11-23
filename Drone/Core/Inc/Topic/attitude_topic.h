@@ -30,9 +30,18 @@ typedef struct{
 
 	float dt;
 
+	/* compass, worked out even when it is not used (ATT_EST_USE_MAG 0) */
+	float magHeading;		/* rad, -pi..pi, tilt compensated, 0 = north (declination added) */
+	uint8_t magStatus;
+
 	uint32_t timestamp_us;
 
 } Attitude_Data_t;
+
+#define ATT_MAG_FRESH	0x01	/* compass readings arrive (it is calibrated) */
+#define ATT_MAG_OK		0x02	/* field strength and dip match the motors-off reference */
+#define ATT_MAG_IN_USE	0x04	/* ATT_EST_USE_MAG on: the heading follows the compass, yaw 0 = north */
+#define ATT_MAG_REF		0x08	/* the motors-off reference is learnt (~1 s of readings on the ground) */
 
 extern Topic_t attitudeTopic;
 

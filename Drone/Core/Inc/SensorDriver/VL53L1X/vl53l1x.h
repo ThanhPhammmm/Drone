@@ -10,7 +10,6 @@
 #define VL53L1X_I2C				hi2c1
 #define VL53L1X_INT_PIN			VL53L1X_GPIO1_Pin
 
-/* chosen at init; 33 ms in long mode = ~30 Hz, up to ~4 m indoors */
 #define VL53L1X_DEFAULT_MODE		VL53L1X_DISTANCE_LONG
 #define VL53L1X_DEFAULT_BUDGET_MS	33
 

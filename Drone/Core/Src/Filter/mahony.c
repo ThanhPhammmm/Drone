@@ -8,14 +8,24 @@
 
 #define MAHONY_DT_MAX			0.05f
 
-/* Earth field is 0.25..0.65 G. Outside this band the reading is a bad
- * calibration or motor/ESC current, not the earth. */
-#define MAHONY_MAG_NORM_MIN		0.15f	/* gauss */
-#define MAHONY_MAG_NORM_MAX		1.00f	/* gauss */
-#define MAHONY_MAG_WEIGHT		0.2f	/* heading error (rad) -> correction, relative to kp */
+#define MAHONY_PI				3.14159265f
+#define MAHONY_MAG_BIAS_ERR		0.10f	/* rad (~6 deg): the most heading error the bias learns from,
+										* so a field bent for a while (steel nearby) teaches little drift */
+#define MAHONY_MAG_ERR_MAX		0.26f	/* rad (~15 deg): the most heading error one reading corrects at
+										* full gain. A bigger one (a bent field no check caught, or a real
+										* error in flight) is pulled in slowly: 1.5 deg/s in flight */
+#define MAHONY_MAG_MAX_RATE		1.0f	/* rad/s (~57 deg/s): turning faster, the compass is not used.
+										* Its reading is up to ~10 ms old when it arrives: at a fast
+										* turn that alone looks like a heading error */
 
 static inline float mahony_clamp(float v, float lim){
 	return v < -lim ? -lim : (v > lim ? lim : v);
+}
+
+static inline float mahony_wrap_pi(float a){
+	while(a > MAHONY_PI) a -= 2.0f * MAHONY_PI;
+	while(a < -MAHONY_PI) a += 2.0f * MAHONY_PI;
+	return a;
 }
 
 static inline uint8_t normalize3(float *x, float *y,float *z){
@@ -60,6 +70,35 @@ void Mahony_Init(Mahony_t *m, float kp,float ki){
 	m->rate[0] = 0.0f;
 	m->rate[1] = 0.0f;
 	m->rate[2] = 0.0f;
+
+	m->magKp			= 0.0f;
+	m->magKi			= 0.0f;
+	m->declination		= 0.0f;
+	m->magSnap			= 0;
+	m->magSnapRad		= MAHONY_PI;
+	m->magInterval		= 0.0f;
+	m->headingAligned	= 0;
+}
+
+uint8_t Mahony_MagGeometry(const Mahony_t *m, const float mag[3], float *headingErr, float *dip, float *norm){
+	float mx = mag[0], my = mag[1], mz = mag[2];
+	float n = sqrtf(mx*mx + my*my + mz*mz);
+	if(!(n > 1e-6f && n < 1e6f)) return 0;		/* zero, NaN or infinite: no reading */
+	mx /= n; my /= n; mz /= n;
+
+	float q0 = m->q[0], q1 = m->q[1], q2 = m->q[2], q3 = m->q[3];
+	/* measured field -> earth frame (rows of the body -> earth rotation) */
+	float hx = 2.0f*mx*(0.5f - q2*q2 - q3*q3) + 2.0f*my*(q1*q2 - q0*q3) + 2.0f*mz*(q1*q3 + q0*q2);
+	float hy = 2.0f*mx*(q1*q2 + q0*q3) + 2.0f*my*(0.5f - q1*q1 - q3*q3) + 2.0f*mz*(q2*q3 - q0*q1);
+	float hz = 2.0f*mx*(q1*q3 - q0*q2) + 2.0f*my*(q2*q3 + q0*q1) + 2.0f*mz*(0.5f - q1*q1 - q2*q2);
+	if(!(hx*hx + hy*hy >= 1e-4f)) return 0;		/* field (almost) vertical: no heading in it */
+
+	/* the field's horizontal part points to magnetic north, which lies at
+	 * `declination` east of true north: with a right heading it is seen there */
+	if(headingErr) *headingErr = mahony_wrap_pi(atan2f(hy, hx) - m->declination);
+	if(dip) *dip = asinf(hz > 1.0f ? 1.0f : (hz < -1.0f ? -1.0f : hz));
+	if(norm) *norm = n;
+	return 1;
 }
 
 void Mahony_Update(Mahony_t *m, const BMI088_Data_t *imu, const float mag[3], uint8_t magValid){
@@ -103,47 +142,46 @@ void Mahony_Update(Mahony_t *m, const BMI088_Data_t *imu, const float mag[3], ui
 		ez = ax*vy - ay*vx;
 	}
 
-	float mx = mag[0];
-	float my = mag[1];
-	float mz = mag[2];
-	float mNorm = sqrtf(mx*mx + my*my + mz*mz);
-	if(magValid && mNorm > MAHONY_MAG_NORM_MIN && mNorm < MAHONY_MAG_NORM_MAX){
-		mx /= mNorm;
-		my /= mNorm;
-		mz /= mNorm;
-		// measured magnetic field → world frame
-		float hx = 2.0f*mx*(0.5f - q2*q2 - q3*q3) + 2.0f*my*(q1*q2 - q0*q3) + 2.0f*mz*(q1*q3 + q0*q2);
-		float hy = 2.0f*mx*(q1*q2 + q0*q3) + 2.0f*my*(0.5f - q1*q1 - q3*q3) + 2.0f*mz*(q2*q3 - q0*q1);
-
-		if(hx*hx + hy*hy > 1e-6f){
-			// heading error, magnetic north = yaw 0 (declination ignored)
-			float headingErr = atan2f(hy, hx);
-
-			if(!m->headingAligned){
-				/* start from the magnetometer heading instead of converging to it */
-				mahony_rotate_yaw(m, -headingErr);
-				m->headingAligned = 1;
-				q0 = m->q[0]; q1 = m->q[1]; q2 = m->q[2]; q3 = m->q[3];
-				headingErr = 0.0f;
-			}
-			headingErr *= MAHONY_MAG_WEIGHT;
-			hex = headingErr * vx;
-			hey = headingErr * vy;
-			hez = headingErr * vz;
+	/* compass: the heading error turned into a rotation about the earth vertical
+	 * (v is "up" in body axes), so it only ever corrects the heading */
+	float hb = 0.0f;
+	float headingErr;
+	if(magValid &&
+		imu->gyro.x*imu->gyro.x + imu->gyro.y*imu->gyro.y + imu->gyro.z*imu->gyro.z < MAHONY_MAG_MAX_RATE*MAHONY_MAG_MAX_RATE &&
+		Mahony_MagGeometry(m, mag, &headingErr, 0, 0)){
+		if(m->magSnap && (!m->headingAligned || fabsf(headingErr) > m->magSnapRad)){
+			/* start from the compass heading (or jump back to it on the ground,
+			 * e.g. after a compass calibration) instead of crawling there */
+			mahony_rotate_yaw(m, -headingErr);
+			m->headingAligned = 1;
+			q0 = m->q[0]; q1 = m->q[1]; q2 = m->q[2]; q3 = m->q[3];
+			headingErr = 0.0f;
+		}
+		/* never aligned on the ground (it was turning the whole time): not used until it is,
+		 * since the first alignment is a jump of any size */
+		if(m->headingAligned){
+			/* a reading that stands for magInterval seconds: all its correction in this one step */
+			float k = (m->magInterval > 0.0f) ? m->magInterval / dt : 1.0f;
+			float pe = mahony_clamp(headingErr, MAHONY_MAG_ERR_MAX);
+			hex = pe * vx * k;
+			hey = pe * vy * k;
+			hez = pe * vz * k;
+			hb	= m->magKi * k * mahony_clamp(headingErr, MAHONY_MAG_BIAS_ERR);
 		}
 	}
 
-	m->bias[0] = mahony_clamp(m->bias[0] + m->ki * ex * dt, MAHONY_BIAS_LIMIT);
-	m->bias[1] = mahony_clamp(m->bias[1] + m->ki * ey * dt, MAHONY_BIAS_LIMIT);
-	m->bias[2] = mahony_clamp(m->bias[2] + m->ki * ez * dt, MAHONY_BIAS_LIMIT);
+	/* the heading error also teaches the gyro bias (mostly z: the yaw drift) */
+	m->bias[0] = mahony_clamp(m->bias[0] + (m->ki * ex + hb * vx) * dt, MAHONY_BIAS_LIMIT);
+	m->bias[1] = mahony_clamp(m->bias[1] + (m->ki * ey + hb * vy) * dt, MAHONY_BIAS_LIMIT);
+	m->bias[2] = mahony_clamp(m->bias[2] + (m->ki * ez + hb * vz) * dt, MAHONY_BIAS_LIMIT);
 
 	m->rate[0] = imu->gyro.x + m->bias[0];
 	m->rate[1] = imu->gyro.y + m->bias[1];
 	m->rate[2] = imu->gyro.z + m->bias[2];
 
-	float gx = m->rate[0] + m->kp * (ex + hex);
-	float gy = m->rate[1] + m->kp * (ey + hey);
-	float gz = m->rate[2] + m->kp * (ez + hez);
+	float gx = m->rate[0] + m->kp * ex + m->magKp * hex;
+	float gy = m->rate[1] + m->kp * ey + m->magKp * hey;
+	float gz = m->rate[2] + m->kp * ez + m->magKp * hez;
 	
 	float dq0 = 0.5f * (-q1*gx - q2*gy - q3*gz);
 	float dq1 = 0.5f * ( q0*gx + q2*gz - q3*gy);

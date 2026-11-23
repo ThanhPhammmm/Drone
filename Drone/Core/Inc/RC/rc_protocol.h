@@ -75,7 +75,16 @@ typedef struct __attribute__((packed)){
 	int16_t rollSp, pitchSp;	/* angle flown now (sticks, or the position controller), 0.01 deg */
 	int16_t yawRateSp;			/* yaw rate setpoint, 0.1 deg/s */
 	uint8_t tiltDeg;			/* tilt from level, deg */
-} TLM_Attitude_t;	/* 29 bytes */
+	int16_t magHeading;			/* compass heading, 0.1 deg: 0 north, 900 east, 0..3599; -1 = no reading.
+								 * Sent even while the compass is not used (ATT_EST_USE_MAG 0) */
+	uint8_t magStatus;			/* TLM_MAG_* */
+} TLM_Attitude_t;	/* 32 bytes */
+
+/* magStatus byte (attitude frame) */
+#define TLM_MAG_FRESH			0x01	/* compass readings arrive (it is calibrated) */
+#define TLM_MAG_OK				0x02	/* the field looks clean: strength and dip as with the motors off */
+#define TLM_MAG_IN_USE			0x04	/* the heading follows the compass: yaw 0 = north */
+#define TLM_MAG_REF				0x08	/* the field with the motors off is learnt (~1 s on the ground) */
 
 typedef struct __attribute__((packed)){
 	uint8_t magic;

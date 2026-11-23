@@ -13,7 +13,8 @@ typedef enum{
 
 typedef enum{
 	VL53L1X_DISTANCE_SHORT	= 1,		/* up to ~1.3 m, better in sunlight */
-	VL53L1X_DISTANCE_LONG	= 2,		/* up to ~4 m indoors */
+	VL53L1X_DISTANCE_MEDIUM	= 2,		/* up to ~3 m indoors; between the two in sunlight */
+	VL53L1X_DISTANCE_LONG	= 3,		/* up to ~4 m indoors */
 } VL53L1X_DistanceMode_t;
 
 /* range status, as ST's ultra lite driver reports it */
