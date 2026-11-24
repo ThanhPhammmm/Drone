@@ -7,7 +7,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-#define QMC5883_CALIB_MIN_SPAN		(0.25f * QMC5883_LSB_PER_GAUSS_8G)
+#define QMC5883_CALIB_MIN_SPAN		(0.25f * QMC5883_LSB_PER_GAUSS_30G)
 
 typedef struct{
 	QMC5883_Raw_t	raw;

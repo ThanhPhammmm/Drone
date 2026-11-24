@@ -41,7 +41,7 @@
  * right when level but swings when tilted (check 2)   -> flip z */
 #define ATT_EST_USE_MAG	1
 
-#define ATT_EST_MAG_DECLINATION_DEG		0.0f	/* magnetic -> true north, east +. Under 2 deg in Vietnam: 0 is fine */
+#define ATT_EST_MAG_DECLINATION_DEG		0.0f	/* magnetic -> true north, east +, west - */
 #define ATT_EST_MAG_KP_GROUND			0.2f	/* 1/s: heading correction on the ground (~5 s to settle) */
 #define ATT_EST_MAG_KP_FLIGHT			0.1f	/* 1/s: in flight (~10 s): the gyro carries the short term */
 #define ATT_EST_MAG_KI_GROUND			0.02f	/* how fast the compass teaches the gyro its yaw drift (~10 s) */

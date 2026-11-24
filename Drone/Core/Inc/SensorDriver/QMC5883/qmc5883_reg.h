@@ -53,6 +53,9 @@
 #define QMC5883_SETRESET_SETONLY	0x01
 #define QMC5883_SETRESET_OFF		0x02
 
-#define QMC5883_LSB_PER_GAUSS_8G	3750.0f	/* datasheet: Field Range=8G -> 3750 LSB/G */
+#define QMC5883_LSB_PER_GAUSS_2G	15000.0f	/* datasheet: Field Range=2G -> 15000 LSB/G */
+#define QMC5883_LSB_PER_GAUSS_8G	3750.0f		/* datasheet: Field Range=8G -> 3750 LSB/G */
+#define QMC5883_LSB_PER_GAUSS_12G	2500.0f		/* datasheet: Field Range=12G -> 2500 LSB/G */
+#define QMC5883_LSB_PER_GAUSS_30G	1000.0f		/* datasheet: Field Range=30G -> 1000 LSB/G */
 
 #endif /* INC_SENSORDRIVER_QMC5883_QMC5883_REG_H_ */

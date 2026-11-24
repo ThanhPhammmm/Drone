@@ -95,13 +95,15 @@ typedef struct __attribute__((packed)){
 	uint16_t thrust;			/* collective 0..1, 1e-4 */
 	uint16_t hoverThrust;		/* hover thrust measured in flight, 1e-4; 0 = not known yet */
 	int16_t altitude;			/* estimate, cm */
-	int16_t altitudeSp;		/* height it holds (ALT_HOLD, POS_HOLD), cm */
-	int16_t vz;				/* vertical speed, cm/s, +up */
+	int16_t altitudeSp;			/* height it holds (ALT_HOLD, POS_HOLD), cm */
+	int16_t vz;					/* vertical speed, cm/s, +up */
 	int16_t climbSp;			/* climb rate the stick asks, cm/s */
 	int16_t accelUp;			/* vertical acceleration, cm/s^2 */
 	int16_t accelBias;			/* altitude estimator's accel bias, cm/s^2 */
-	int16_t aboveFloor;		/* height above the floor, cm */
-} TLM_Output_t;	/* 30 bytes */
+	int16_t aboveFloor;			/* height above the floor, cm */
+	uint8_t magRefNorm;			/* compass: field strength learnt with the motors off, 0.01 gauss; 0 = not learnt */
+	int8_t magRefDip;			/* ... and its dip below the horizon, deg */
+} TLM_Output_t;	/* 32 bytes */
 
 /* valid byte (sensor frame) */
 #define TLM_VALID_RANGE			0x02	/* ToF: last sample valid (status 0) and fresh */
@@ -126,7 +128,9 @@ typedef struct __attribute__((packed)){
 	uint8_t squal;			 	/* PMW3901 surface quality */
 	uint8_t vibration;			/* | |raw accel| - 1 g | at the sample, 0.1 m/s^2 */
 	uint16_t rcLost;			/* RC packets missed so far (seq gaps) */
-} TLM_Sensor_t;	/* 30 bytes */
+	uint8_t magNorm;			/* compass: field strength now, 0.01 gauss (255 = 2.55 or more); 0 = no reading */
+	int8_t magDip;				/* ... and its dip below the horizon, deg */
+} TLM_Sensor_t;	/* 32 bytes */
 
 /* status byte (GPS frame) */
 #define TLM_GPS_FIX_MASK		0x07	/* fix type: 0 none, 1 dead reckoning, 2 2D, 3 3D, 4 GNSS + DR, 5 time only */

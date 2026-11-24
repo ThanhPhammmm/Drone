@@ -32,6 +32,12 @@
 #define VIB_HIGH			15.0f
 #define MOTOR_WARN_US		1900U
 #define MOTOR_MAX_US		1990U
+
+#define MAG_NORM_MIN_G		0.15f	/* outside 0.15..1.0 gauss a reading is never learnt or used */
+#define MAG_NORM_MAX_G		1.00f
+#define MAG_NORM_TOL		0.15f	/* strength may differ this much (part) from the learnt one */
+#define MAG_DIP_TOL_DEG		8.0f	/* dip may differ this much from the learnt one */
+
 #define CAL_STALE_MS		1500U	/* no calibration frame this long: the drone is armed, or out of reach */
 #define CAL_ASK_MS			2000U	/* "STARTING..." at most this long after a start */
 #define CAL_ASK_FRAMES		3U	/* calibration frames until the drone's answer shows */
@@ -329,6 +335,23 @@ static void PageAttitude(void){
 	Put(0, 5, "Yaw   :", C_GREY); PutF(8, 5, 7, tlm.yaw,   1, 1, C_WHITE);
 	Put(16, 5, "rate", C_GREY); PutF(21, 5, 5, tlm.yawRateSp, 0, 1, C_CYAN);
 	Put(0, 6, "Tilt  :", C_GREY); PutF(8, 6, 7, tlm.tiltDeg, 0, 0, C_WHITE); Put(16, 6, "deg", C_GREY);
+
+	/* compass field now (row 6) and the one learnt with the motors off (row 8): strength in
+	 * gauss and dip in deg. Yellow = the reading fails a check: outside 0.15..1.0 G (never
+	 * learnt: LEARNING stays), or off the learnt field by 15 % / 8 deg (DISTURBED) */
+	{
+		uint8_t now = tlm.magNorm > 0.0f, ref = tlm.magRefNorm > 0.0f;
+		uint8_t bad = now && (tlm.magNorm < MAG_NORM_MIN_G || tlm.magNorm > MAG_NORM_MAX_G ||
+				(ref && (fabsf(tlm.magNorm - tlm.magRefNorm) >= MAG_NORM_TOL * tlm.magRefNorm ||
+						 fabsf((float)(tlm.magDip - tlm.magRefDip)) >= MAG_DIP_TOL_DEG)));
+		uint16_t c = bad ? C_YELLOW : C_WHITE;
+		Put(21, 6, "Fld", C_GREY);
+		PutF(24, 6, 5, now ? tlm.magNorm : NAN, 2, 0, c); Put(29, 6, "G", C_GREY);
+		PutF(30, 6, 4, now ? (float)tlm.magDip : NAN, 0, 1, c); Put(34, 6, "deg", C_GREY);
+		Put(21, 8, "Ref", C_GREY);
+		PutF(24, 8, 5, ref ? tlm.magRefNorm : NAN, 2, 0, C_WHITE); Put(29, 8, "G", C_GREY);
+		PutF(30, 8, 4, ref ? (float)tlm.magRefDip : NAN, 0, 1, C_WHITE); Put(34, 8, "deg", C_GREY);
+	}
 
 	/* compass heading (0 north, 90 east): the drone works it out even while it does not use it */
 	Put(0, 7, "Comp  :", C_GREY);

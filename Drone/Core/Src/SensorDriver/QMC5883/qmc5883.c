@@ -70,7 +70,7 @@ QMC5883_Status_t QMC5883_Init(void){
 	// Define the sign for X Y and Z axis
 	if(QMC5883_WriteReg(QMC5883_REG_SIGN, 0x06) != QMC5883_OK) return QMC5883_ERROR;
 
-	uint8_t ctrl2 = QMC5883_RNG_8G | QMC5883_SETRESET_ON;
+	uint8_t ctrl2 = QMC5883_RNG_30G | QMC5883_SETRESET_ON;
 	if(QMC5883_WriteReg(QMC5883_REG_CTRL2, ctrl2) != QMC5883_OK) return QMC5883_ERROR;
 
 	uint8_t ctrl1 = QMC5883_OSR2_2 | QMC5883_OSR1_4 | QMC5883_ODR_100HZ | QMC5883_MODE_NORMAL;
@@ -84,17 +84,32 @@ QMC5883_Status_t QMC5883_Init(void){
 	return QMC5883_OK;
 }
 
+/* -v as int16: -(-32768) does not fit, it becomes 32767 */
+static int16_t QMC5883_Neg16(int32_t v){
+	v = -v;
+	return (int16_t)(v > 32767 ? 32767 : v);
+}
+
 QMC5883_Status_t QMC5883_Read(void){
 	uint8_t buf[6];
 	if(QMC5883_ReadRegs(QMC5883_REG_DATA_X_LSB, buf, 6) != QMC5883_OK) return QMC5883_ERROR;
 
-	qmc5883.raw.x = (int16_t)((buf[1] << 8) | buf[0]);
-	qmc5883.raw.y = -(int16_t)((buf[3] << 8) | buf[2]);
-	qmc5883.raw.z = (int16_t)((buf[5] << 8) | buf[4]);
+	/* chip axes (datasheet drawing, marking up): X to the pin-1 side, Y down the marking, Z out of the top */
+	int32_t cx = (int16_t)((buf[1] << 8) | buf[0]);
+	int32_t cy = (int16_t)((buf[3] << 8) | buf[2]);
+	int32_t cz = (int16_t)((buf[5] << 8) | buf[4]);
 
-	qmc5883.field.x = ((float)qmc5883.raw.x - qmc5883.calib.offset[0]) / QMC5883_LSB_PER_GAUSS_8G;
-	qmc5883.field.y = ((float)qmc5883.raw.y - qmc5883.calib.offset[1]) / QMC5883_LSB_PER_GAUSS_8G;
-	qmc5883.field.z = ((float)qmc5883.raw.z - qmc5883.calib.offset[2]) / QMC5883_LSB_PER_GAUSS_8G;
+	/* -> body axes FRD (x nose, y right, z down). Mounted marking up, chip X to the drone's left:
+	 * chip X = left, chip Y = tail, so x = -Y, y = -X. Z: z = +Z, measured on the drone (with -Z the
+	 * dip read -52 deg in Vietnam, where the field points down: the dip must be positive).
+	 * Raw, offsets and calibration are all in body axes from here on. */
+	qmc5883.raw.x = QMC5883_Neg16(cy);
+	qmc5883.raw.y = QMC5883_Neg16(cx);
+	qmc5883.raw.z = (int16_t)cz;
+
+	qmc5883.field.x = ((float)qmc5883.raw.x - qmc5883.calib.offset[0]) / QMC5883_LSB_PER_GAUSS_30G;
+	qmc5883.field.y = ((float)qmc5883.raw.y - qmc5883.calib.offset[1]) / QMC5883_LSB_PER_GAUSS_30G;
+	qmc5883.field.z = ((float)qmc5883.raw.z - qmc5883.calib.offset[2]) / QMC5883_LSB_PER_GAUSS_30G;
 
 	return QMC5883_OK;
 }

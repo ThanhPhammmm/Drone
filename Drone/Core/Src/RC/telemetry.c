@@ -95,6 +95,24 @@ static uint8_t TLM_BuildAttitude(uint8_t *buf, uint8_t rcSeq, uint8_t state){
 	return (uint8_t)sizeof(f);
 }
 
+/* compass strength, 0.01 gauss in a byte: 0 = no reading, 1..255 (255 = 2.55 G or more) */
+static uint8_t TLM_MagNorm(float gauss){
+	if(!(gauss > 0.0f)) return 0;
+	float v = gauss * 100.0f + 0.5f;
+	if(v < 1.0f) v = 1.0f;
+	if(v > 255.0f) v = 255.0f;
+	return (uint8_t)v;
+}
+
+/* dip, rad -> whole degrees in a signed byte */
+static int8_t TLM_MagDip(float rad){
+	float d = rad * TLM_RAD2DEG;
+	d += (d >= 0.0f) ? 0.5f : -0.5f;
+	if(d > 90.0f) d = 90.0f;
+	if(d < -90.0f) d = -90.0f;
+	return (int8_t)d;
+}
+
 /* [MOT] [ALT] */
 static uint8_t TLM_BuildOutput(uint8_t *buf, uint8_t rcSeq, uint8_t state){
 	Altitude_Data_t alt = {0};
@@ -123,6 +141,11 @@ static uint8_t TLM_BuildOutput(uint8_t *buf, uint8_t rcSeq, uint8_t state){
 	f.accelUp		= TLM_S16(alt.accelUp * 100.0f);
 	f.accelBias		= TLM_S16(alt.accelBias * 100.0f);
 	f.aboveFloor	= TLM_S16(alt.aboveFloor * 100.0f);
+
+	Attitude_Data_t att = {0};
+	AttitudeTopic_Copy(&att);
+	f.magRefNorm	= TLM_MagNorm(att.magRefNorm);
+	f.magRefDip		= TLM_MagDip(att.magRefDip);
 
 	memcpy(buf, &f, sizeof(f));
 	return (uint8_t)sizeof(f);
@@ -173,6 +196,8 @@ static uint8_t TLM_BuildSensor(uint8_t *buf, uint8_t rcSeq, uint8_t state, uint1
 	f.squal			= flow.squal;
 	f.vibration		= (uint8_t)((vib > 255.0f) ? 255.0f : vib + 0.5f);
 	f.rcLost		= rcLost;
+	f.magNorm		= TLM_MagNorm(att.magNorm);
+	f.magDip		= TLM_MagDip(att.magDip);
 
 	memcpy(buf, &f, sizeof(f));
 	return (uint8_t)sizeof(f);

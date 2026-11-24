@@ -93,6 +93,8 @@ void Telemetry_Decode(const uint8_t *buf, uint8_t len){
 		telemetry.accelUp		= f.accelUp * 0.01f;
 		telemetry.accelBias		= f.accelBias * 0.01f;
 		telemetry.aboveFloor	= f.aboveFloor * 0.01f;
+		telemetry.magRefNorm	= f.magRefNorm * 0.01f;
+		telemetry.magRefDip	= f.magRefDip;
 	}
 	else if(buf[1] == TLM_FRAME_SENSOR && len == sizeof(TLM_Sensor_t)){
 		TLM_Sensor_t f;
@@ -120,6 +122,8 @@ void Telemetry_Decode(const uint8_t *buf, uint8_t len){
 		telemetry.squal			= f.squal;
 		telemetry.vibration		= f.vibration * 0.1f;
 		telemetry.rcLost		= f.rcLost;
+		telemetry.magNorm		= f.magNorm * 0.01f;
+		telemetry.magDip		= f.magDip;
 	}
 	else if(buf[1] == TLM_FRAME_GPS && len == sizeof(TLM_Gps_t)){
 		TLM_Gps_t f;
@@ -228,6 +232,7 @@ static const char tlmLegend[] =
 	"# [IMU] Gx/Gy/Gz deg/s (roll/pitch/yaw rate), Ax/Ay/Az m/s^2 (x front, y right, z down: still and level, Az = -9.81)\r\n"
 	"# [ATT] deg. RollSp/PitchSp: angle flown now (sticks; the position controller in POS_HOLD), YawSp deg/s, Tilt deg from level\r\n"
 	"#       MagHdg: compass heading deg (0 north, 90 east; -1 no reading), MagSt: 1 readings arrive + 2 field clean + 4 heading follows the compass + 8 field learnt\r\n"
+	"#       MagN gauss, MagDip deg: the field now (0 = no reading); MagRefN, MagRefDip: learnt with the motors off (0 = not yet)\r\n"
 	"# [MOT] us: M1 front-right, M2 rear-right, M3 rear-left, M4 front-left | Thr, Hover 0..1 (Hover 0 = not known yet)\r\n"
 	"# [ALT] m, m/s, m/s^2. AltSp: height it holds, ClimbSp: what the stick asks, ABias: estimator accel bias, OverFloor: height above the floor\r\n"
 	"# [POS] m, m/s. X: the nose direction at power-up, Y: its right. XSp/YSp: the spot it holds in POS_HOLD. Src: what measures it now (NONE, FLOW, GPS)\r\n"
@@ -318,6 +323,10 @@ static uint16_t Telemetry_FormatLine(char *buf, const TLM_Attitude_t *a, const T
 	if(a->magHeading < 0) p = PutStr(p, ", MagHdg:-1");
 	else FIELD_LABELED(", MagHdg:", a->magHeading, 1);
 	FIELD_LABELED(", MagSt:", a->magStatus, 0);
+	FIELD_LABELED(", MagN:", s->magNorm, 2);
+	FIELD_LABELED(", MagDip:", s->magDip, 0);
+	FIELD_LABELED(", MagRefN:", o->magRefNorm, 2);
+	FIELD_LABELED(", MagRefDip:", o->magRefDip, 0);
 
 	p = PutStr(p, " | [MOT] ");
 	FIELD_LABELED("M1:", o->motor[0], 0);

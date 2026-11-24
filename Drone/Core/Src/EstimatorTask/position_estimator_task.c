@@ -292,9 +292,7 @@ static void PositionEstimator_Align(const Gps_Data_t *g, const PosHist_t *then, 
 	}
 }
 
-/* The compass took over the heading (ATT_EST_USE_MAG 1, see attitude_estimator_task.h):
- * yaw 0 is north from now on, so the GPS needs no turn. An angle found from the GPS
- * before that was for the old yaw frame, and so was the GPS origin. */
+/* The compass took over the heading (ATT_EST_USE_MAG 1, see attitude_estimator_task.h) */
 static void PositionEstimator_HeadingNorth(const Attitude_Data_t *att){
 	if(gps.headingNorth || !(att->magStatus & ATT_MAG_IN_USE)) return;
 	gps.headingNorth	= 1;
@@ -351,7 +349,7 @@ static void PositionEstimator_Gps(uint32_t nowUs, uint8_t standing, uint8_t flow
 	uint8_t posUse = !standing;
 	uint8_t velUse = !standing && !flowFresh;
 	if(posUse && gps.posUsedAgo >= POS_EST_GPS_REANCHOR_CYCLES){
-		/* Take difference between drone position and gps position to get the percise gps position*/
+		/* Take difference between drone position and gps position to get the precise gps position*/
 		gps.originX = then->x - gx;
 		gps.originY = then->y - gy;
 	}

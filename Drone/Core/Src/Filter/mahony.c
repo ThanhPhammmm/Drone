@@ -83,18 +83,17 @@ void Mahony_Init(Mahony_t *m, float kp,float ki){
 uint8_t Mahony_MagGeometry(const Mahony_t *m, const float mag[3], float *headingErr, float *dip, float *norm){
 	float mx = mag[0], my = mag[1], mz = mag[2];
 	float n = sqrtf(mx*mx + my*my + mz*mz);
-	if(!(n > 1e-6f && n < 1e6f)) return 0;		/* zero, NaN or infinite: no reading */
+	if(!(n > 1e-6f && n < 1e6f)) return 0;
 	mx /= n; my /= n; mz /= n;
 
 	float q0 = m->q[0], q1 = m->q[1], q2 = m->q[2], q3 = m->q[3];
 	/* measured field -> earth frame (rows of the body -> earth rotation) */
-	float hx = 2.0f*mx*(0.5f - q2*q2 - q3*q3) + 2.0f*my*(q1*q2 - q0*q3) + 2.0f*mz*(q1*q3 + q0*q2);
-	float hy = 2.0f*mx*(q1*q2 + q0*q3) + 2.0f*my*(0.5f - q1*q1 - q3*q3) + 2.0f*mz*(q2*q3 - q0*q1);
-	float hz = 2.0f*mx*(q1*q3 - q0*q2) + 2.0f*my*(q2*q3 + q0*q1) + 2.0f*mz*(0.5f - q1*q1 - q2*q2);
+	float hx = mx * (q0*q0 + q1*q1 - q2*q2 - q3*q3) + 2.0f * my * (q1*q2 - q0*q3) + 2.0f * mz * (q1*q3 + q0*q2);
+	float hy = 2.0f * mx * (q1*q2 + q0*q3) + my * (q0*q0 - q1*q1 + q2*q2 - q3*q3) + 2.0f * mz * (q2*q3 - q0*q1);
+	float hz = 2.0f * mx * (q1*q3 - q0*q2) + 2.0f * my * (q2*q3 + q0*q1) + mz * (q0*q0 - q1*q1 - q2*q2 + q3*q3);
 	if(!(hx*hx + hy*hy >= 1e-4f)) return 0;		/* field (almost) vertical: no heading in it */
 
-	/* the field's horizontal part points to magnetic north, which lies at
-	 * `declination` east of true north: with a right heading it is seen there */
+	/* The error of the guess */
 	if(headingErr) *headingErr = mahony_wrap_pi(atan2f(hy, hx) - m->declination);
 	if(dip) *dip = asinf(hz > 1.0f ? 1.0f : (hz < -1.0f ? -1.0f : hz));
 	if(norm) *norm = n;

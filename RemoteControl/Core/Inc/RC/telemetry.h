@@ -27,6 +27,10 @@ typedef struct{
 	uint8_t tiltDeg;	/* deg from level */
 	float magHeading;	/* deg, compass: 0 north, 90 east; < 0 = no reading */
 	uint8_t magStatus;	/* TLM_MAG_*: readings arrive, field clean, heading follows it, field learnt */
+	float magNorm;		/* gauss, field strength now; 0 = no reading */
+	int8_t magDip;		/* deg, its dip below the horizon */
+	float magRefNorm;	/* gauss, learnt with the motors off; 0 = not learnt yet */
+	int8_t magRefDip;	/* deg */
 
 	/* outputs */
 	uint16_t motor[4];	/* us: M1 FR, M2 RR, M3 RL, M4 FL */

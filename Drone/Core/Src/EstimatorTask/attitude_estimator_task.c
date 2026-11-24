@@ -1,5 +1,6 @@
 #include "attitude_topic.h"
 #include "debug.h"
+#include "calibration.h"
 #include <math.h>
 
 #define MAG_MAX_AGE_US		60000	/* the compass is read at ~50 Hz: older than this = stale */
@@ -20,20 +21,22 @@
 static Mahony_t mahony;
 AttitudeEstimator_Handle_t attitudeEstimator;
 
-/* compass: each new reading is checked once against a reference of the earth's
- * field here (strength and dip), learnt while the motors are off */
 static struct{
-	uint32_t lastUs;		/* the reading handled last */
-	uint8_t fresh;			/* readings were arriving at the last step */
-	uint32_t samples;		/* readings learnt into the reference */
+	uint32_t lastUs;
+	uint8_t fresh;
+	uint32_t samples;
 	float refNorm;
-	float refDip;			/* rad */
+	float refDip;
 	uint8_t valid;			/* the last reading gave a heading */
 	uint8_t ok;				/* ... and matched the reference */
-	float heading;			/* rad, its compass heading */
+	float norm;				/* gauss, its field strength */
+	float dip;				/* rad, its dip */
 	float gyroTurn;			/* rad, the heading change the gyro alone sees, summed up */
-	float lastTurn;			/* gyroTurn at the last reading */
-	uint8_t haveLast;		/* the last reading gave a heading too */
+	float lastGyroTurn;
+
+	float lastHeading;		/* rad, its compass heading */
+	uint8_t haveLastValid;
+	uint8_t relearn;
 } magChk;
 
 static float AttitudeEstimator_Wrap(float a){
@@ -65,11 +68,11 @@ void AttitudeEstimatorTask(void *argument){
 		float az = imu.accel.z;
 
 		uint8_t motors = Arm_MotorsAllowed();
+		uint8_t motorsOff = !motors && !Arm_GroundIdle();
 
-		/* the gyro's own heading change (about the earth vertical), to check the compass against.
-		 * A field fixed to the frame (motor current) turns with the drone; the earth's does not */
 		if(imu.dt > 0.0f && imu.dt < 0.05f){
 			float q0 = mahony.q[0], q1 = mahony.q[1], q2 = mahony.q[2], q3 = mahony.q[3];
+			/* Rotate into the earth frame */
 			float down = 2.0f * (q1*q3 - q0*q2) * (imu.gyro.x + mahony.bias[0]) +
 						2.0f * (q0*q1 + q2*q3) * (imu.gyro.y + mahony.bias[1]) +
 						(q0*q0 - q1*q1 - q2*q2 + q3*q3) * (imu.gyro.z + mahony.bias[2]);
@@ -96,18 +99,20 @@ void AttitudeEstimatorTask(void *argument){
 				magGap = (float)(uint32_t)(mag.timestamp_us - magChk.lastUs) * 1e-6f;
 				magInterval = (magGap < MAG_INTERVAL_MAX_S) ? magGap : MAG_INTERVAL_MAX_S;
 			}
-			/* readings came back after a gap with the motors off (a compass calibration
-			 * ends like that): the field may read differently now, learn it again */
-			if(!magChk.fresh && !motors) magChk.samples = 0;
+			if(magChk.relearn && Calib_GetStatus(CALIB_SENSOR_QMC5883) != CALIB_RUNNING){
+				magChk.samples = 0;
+				magChk.relearn = 0;
+			}
 			magChk.lastUs = mag.timestamp_us;
 
 			float headingErr, dip, norm;
-			magChk.valid = Mahony_MagGeometry(&mahony, magVec, &headingErr, &dip, &norm);
+			magChk.valid = Mahony_MagGeometry(&mahony, magVec, &headingErr, &dip, &norm); // inspector
+			magChk.norm = magChk.valid ? norm : 0.0f;
+			magChk.dip = magChk.valid ? dip : 0.0f;
 			magChk.ok = 0;
 			if(magChk.valid){
 				uint8_t earthLike = norm > MAG_NORM_MIN_G && norm < MAG_NORM_MAX_G;
-				if(!motors && earthLike){
-					/* motors off: this is the earth's field here */
+				if(motorsOff && earthLike){
 					if(magChk.samples == 0){
 						magChk.refNorm = norm;
 						magChk.refDip = dip;
@@ -124,35 +129,40 @@ void AttitudeEstimatorTask(void *argument){
 				float heading = AttitudeEstimator_Wrap(yawNow - headingErr);
 
 				/* since the last reading the compass turned as much as the gyro did */
-				uint8_t turnOk = magChk.haveLast && magGap <= MAG_TURN_MAX_S &&
-								 fabsf(AttitudeEstimator_Wrap((heading - magChk.heading) -
-															(magChk.gyroTurn - magChk.lastTurn)))
+				uint8_t turnOk = magChk.haveLastValid && magGap <= MAG_TURN_MAX_S &&
+								 fabsf(AttitudeEstimator_Wrap((heading - magChk.lastHeading) -
+															(magChk.gyroTurn - magChk.lastGyroTurn)))
 									 < MAG_TURN_TOL_DEG * ATT_DEG2RAD;
-				magChk.heading = heading;
-				magChk.lastTurn = magChk.gyroTurn;
+				magChk.lastHeading = heading;
+				magChk.lastGyroTurn = magChk.gyroTurn;
 
 				/* motor current bends the field: its strength or dip changes, or it turns with the frame */
 				magChk.ok = earthLike && turnOk && magChk.samples >= ATT_EST_MAG_REF_SAMPLES &&
 							fabsf(norm - magChk.refNorm) < ATT_EST_MAG_NORM_TOL * magChk.refNorm &&
 							fabsf(dip - magChk.refDip) < ATT_EST_MAG_DIP_TOL_DEG * ATT_DEG2RAD;
 			}
-			magChk.haveLast = magChk.valid;
+			magChk.haveLastValid = magChk.valid;
 		}
 		magChk.fresh = magFresh;
+		if(Calib_GetStatus(CALIB_SENSOR_QMC5883) == CALIB_RUNNING) magChk.relearn = 1;
 		uint8_t magValid = magFresh && magChk.valid;
 		uint8_t magOk = magValid && magChk.ok;
 
-		mahony.kp		= motors ? MAHONY_KP_FLIGHT : MAHONY_KP_GROUND;
-		mahony.ki		= motors ? MAHONY_KI_FLIGHT : MAHONY_KI_GROUND;
-		mahony.magKp	= motors ? ATT_EST_MAG_KP_FLIGHT : ATT_EST_MAG_KP_GROUND;
-		mahony.magKi	= motors ? ATT_EST_MAG_KI_FLIGHT : ATT_EST_MAG_KI_GROUND;
-		mahony.magSnap = !motors;	/* never jump the heading in the air */
-		mahony.magInterval = magInterval;
-		/* each reading is used once, on the step it arrives: never compared later with a newer heading */
+		mahony.kp			= motors ? MAHONY_KP_FLIGHT : MAHONY_KP_GROUND;
+		mahony.ki			= motors ? MAHONY_KI_FLIGHT : MAHONY_KI_GROUND;
+		mahony.magKp		= motors ? ATT_EST_MAG_KP_FLIGHT : ATT_EST_MAG_KP_GROUND;
+		mahony.magKi		= motors ? ATT_EST_MAG_KI_FLIGHT : ATT_EST_MAG_KI_GROUND;
+		mahony.magSnap		= !motors;	/* never jump the heading in the air */
+		mahony.magInterval	= magInterval;
 		Mahony_Update(&mahony, &imu, magVec, ATT_EST_USE_MAG && magOk && magNew && magInterval > 0.0f);
 
 		Attitude_Data_t *attitude = &attitudeEstimator.data;
-		attitude->magHeading = magChk.heading;
+		attitude->magHeading = magChk.lastHeading;
+		attitude->magNorm = magValid ? magChk.norm : 0.0f;
+		attitude->magDip = magValid ? magChk.dip : 0.0f;
+		uint8_t refLearnt = magChk.samples >= ATT_EST_MAG_REF_SAMPLES;
+		attitude->magRefNorm = refLearnt ? magChk.refNorm : 0.0f;
+		attitude->magRefDip = refLearnt ? magChk.refDip : 0.0f;
 		attitude->magStatus = (magValid ? ATT_MAG_FRESH : 0) | (magOk ? ATT_MAG_OK : 0) |
 							((ATT_EST_USE_MAG && mahony.headingAligned) ? ATT_MAG_IN_USE : 0) |
 							((magChk.samples >= ATT_EST_MAG_REF_SAMPLES) ? ATT_MAG_REF : 0);

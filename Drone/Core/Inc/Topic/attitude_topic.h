@@ -33,6 +33,10 @@ typedef struct{
 	/* compass, worked out even when it is not used (ATT_EST_USE_MAG 0) */
 	float magHeading;		/* rad, -pi..pi, tilt compensated, 0 = north (declination added) */
 	uint8_t magStatus;
+	float magNorm;			/* gauss, field strength of the last reading; 0 = no reading */
+	float magDip;			/* rad, its dip below the horizon */
+	float magRefNorm;		/* gauss, learnt with the motors off; 0 = not learnt yet */
+	float magRefDip;		/* rad */
 
 	uint32_t timestamp_us;
 
